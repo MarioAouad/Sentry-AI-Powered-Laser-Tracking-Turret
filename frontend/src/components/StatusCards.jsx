@@ -14,7 +14,7 @@ export default function StatusCards({ systemState, isMobile }) {
       <div
         style={{
           ...grid,
-          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, minmax(0, 1fr))",
         }}
       >
         {items.map((item) => (
@@ -31,7 +31,7 @@ export default function StatusCards({ systemState, isMobile }) {
 const card = {
   background: "#0f172a",
   border: "1px solid #1e293b",
-  borderRadius: "16px",
+  borderRadius: "8px",
   padding: "18px",
   boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
 };
@@ -50,7 +50,7 @@ const grid = {
 const miniCard = {
   background: "#111827",
   border: "1px solid #243041",
-  borderRadius: "12px",
+  borderRadius: "8px",
   padding: "12px",
 };
 

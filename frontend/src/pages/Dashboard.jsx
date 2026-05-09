@@ -6,7 +6,7 @@ import ServoPanel from "../components/ServoPanel";
 import { useSystemState } from "../hooks/useSystemstate";
 
 export default function Dashboard() {
-  const { systemState, setSystemState } = useSystemState();
+  const { systemState } = useSystemState();
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function Dashboard() {
     <div
       style={{
         ...styles.page,
-        padding: isMobile ? "14px" : isTablet ? "18px" : "24px",
+        padding: isMobile ? "12px" : isTablet ? "16px" : "20px",
       }}
     >
       <header
@@ -34,7 +34,7 @@ export default function Dashboard() {
           flexDirection: isMobile ? "column" : "row",
           alignItems: isMobile ? "flex-start" : "center",
           gap: isMobile ? "14px" : "0",
-          padding: isMobile ? "16px" : "20px 24px",
+          padding: isMobile ? "14px" : "16px 20px",
         }}
       >
         <div>
@@ -47,7 +47,6 @@ export default function Dashboard() {
             AI Sentry Turret Dashboard
           </h1>
 
-          <p style={styles.subtitle}>Frontend simulation interface</p>
         </div>
 
         <div style={styles.headerBadge}>
@@ -59,20 +58,17 @@ export default function Dashboard() {
       <div
         style={{
           ...styles.mainGrid,
-          gridTemplateColumns: isTablet ? "1fr" : "2fr 1fr",
-          gap: isMobile ? "14px" : "20px",
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(340px, 0.85fr) minmax(520px, 1.35fr)",
+          gap: isMobile ? "14px" : "18px",
         }}
       >
         <div style={styles.leftColumn}>
-          <LiveFeed systemState={systemState} isMobile={isMobile} />
+          <ControlPanel systemState={systemState} isMobile={isMobile} />
         </div>
 
         <div style={styles.rightColumn}>
+          <LiveFeed systemState={systemState} isMobile={isMobile} />
           <StatusCards systemState={systemState} isMobile={isMobile} />
-          <ControlPanel
-            systemState={systemState}
-            setSystemState={setSystemState}
-          />
           <ServoPanel systemState={systemState} />
         </div>
       </div>
@@ -86,14 +82,15 @@ const styles = {
     background: "#020617",
     color: "#e2e8f0",
     fontFamily: "Arial, sans-serif",
+    boxSizing: "border-box",
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
-    marginBottom: "24px",
+    marginBottom: "18px",
     background: "#0f172a",
     border: "1px solid #1e293b",
-    borderRadius: "16px",
+    borderRadius: "8px",
     boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
   },
   title: {
@@ -126,14 +123,17 @@ const styles = {
   },
   mainGrid: {
     display: "grid",
-    alignItems: "start",
+    alignItems: "stretch",
+    minHeight: "calc(100vh - 128px)",
   },
   leftColumn: {
     display: "grid",
-    gap: "20px",
+    minHeight: 0,
   },
   rightColumn: {
     display: "grid",
-    gap: "20px",
+    gap: "18px",
+    gridTemplateRows: "minmax(420px, 1fr) auto auto",
+    minHeight: 0,
   },
 };

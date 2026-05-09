@@ -27,7 +27,8 @@ export default function LiveFeed({ systemState, isMobile }) {
       <div
         style={{
           ...feed,
-          height: isMobile ? "260px" : "420px",
+          height: isMobile ? "300px" : "100%",
+          minHeight: isMobile ? "300px" : "420px",
         }}
       >
         <div style={crosshairVertical}></div>
@@ -48,9 +49,13 @@ export default function LiveFeed({ systemState, isMobile }) {
 const card = {
   background: "#0f172a",
   border: "1px solid #1e293b",
-  borderRadius: "16px",
+  borderRadius: "8px",
   padding: "18px",
   boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+  minHeight: "100%",
+  display: "grid",
+  gridTemplateRows: "auto 1fr",
+  boxSizing: "border-box",
 };
 
 const cardHeader = {
@@ -76,7 +81,7 @@ const statusBadge = {
 const feed = {
   background:
     "linear-gradient(180deg, rgba(15,23,42,1) 0%, rgba(0,0,0,1) 100%)",
-  borderRadius: "14px",
+  borderRadius: "8px",
   border: "1px solid #334155",
   position: "relative",
   overflow: "hidden",

@@ -1,44 +1,31 @@
 import bodyImg from "../assets/body.png";
 
-export default function ControlPanel({ systemState, setSystemState }) {
-  function handleStart() {
-    setSystemState((prev) => ({
-      ...prev,
-      systemState: "Target Detected",
-    }));
-  }
-
-  function handleStop() {
-    setSystemState((prev) => ({
-      ...prev,
-      systemState: "Scanning",
-    }));
-  }
-
+export default function ControlPanel({ systemState, isMobile }) {
   return (
-    <div style={card}>
-      <h3 style={title}>Body Points</h3>
-
-      <div style={buttonRow}>
-        <button style={startBtn} onClick={handleStart}>
-          Start
-        </button>
-        <button style={stopBtn} onClick={handleStop}>
-          Stop
-        </button>
+    <section style={panel}>
+      <div style={header}>
+        <h3 style={title}>Target Body Map</h3>
+        <span style={stateBadge}>{systemState.indicator}</span>
       </div>
 
       <div style={bodyPanel}>
-        <div style={bodyFigure}>
-          {/* Human image */}
+        <div
+          style={{
+            ...bodyFigure,
+            width: isMobile ? "min(74vw, 260px)" : "min(30vw, 360px)",
+            height: isMobile ? "min(92vw, 430px)" : "min(calc(100vh - 230px), 620px)",
+          }}
+        >
           <img src={bodyImg} alt="body" style={imgStyle} />
 
-          {/* Points */}
-          <div style={{ ...point, ...headPoint }} />
-          <div style={{ ...point, ...chestPoint }} />
+          <div style={{ ...point, ...headPoint }}>
+            <span style={pointCore} />
+          </div>
+          <div style={{ ...point, ...chestPoint }}>
+            <span style={pointCore} />
+          </div>
         </div>
 
-        {/* Legend */}
         <div style={legend}>
           <div style={legendItem}>
             <span style={legendDot}></span> Head
@@ -48,105 +35,110 @@ export default function ControlPanel({ systemState, setSystemState }) {
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-const card = {
+const panel = {
   background: "#0f172a",
   border: "1px solid #1e293b",
-  borderRadius: "16px",
+  borderRadius: "8px",
   padding: "18px",
   boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+  minHeight: "100%",
+  display: "grid",
+  gridTemplateRows: "auto 1fr",
+  boxSizing: "border-box",
+};
+
+const header = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  marginBottom: "12px",
 };
 
 const title = {
-  margin: "0 0 16px 0",
+  margin: 0,
   fontSize: "18px",
   color: "#f8fafc",
 };
 
-const buttonRow = {
-  display: "flex",
-  gap: "10px",
-  marginBottom: "18px",
-  flexWrap: "wrap",
-};
-
-const startBtn = {
-  flex: 1,
-  minWidth: "120px",
-  padding: "10px 14px",
-  background: "#22c55e",
-  border: "none",
-  borderRadius: "10px",
-  color: "white",
+const stateBadge = {
+  border: "1px solid #334155",
+  borderRadius: "999px",
+  color: "#cbd5e1",
+  fontSize: "12px",
   fontWeight: "700",
-  cursor: "pointer",
-};
-
-const stopBtn = {
-  flex: 1,
-  minWidth: "120px",
-  padding: "10px 14px",
-  background: "#ef4444",
-  border: "none",
-  borderRadius: "10px",
-  color: "white",
-  fontWeight: "700",
-  cursor: "pointer",
+  padding: "6px 10px",
+  background: "#111827",
 };
 
 const bodyPanel = {
   display: "flex",
   flexDirection: "column",
-  gap: "16px",
+  justifyContent: "flex-start",
+  gap: "14px",
   alignItems: "center",
+  minHeight: 0,
+  paddingTop: "18px",
 };
 
 const bodyFigure = {
   position: "relative",
-  width: "220px",
-  height: "320px",
-  background: "#111827",
-  border: "1px solid #243041",
-  borderRadius: "14px",
-  overflow: "hidden",
+  background: "transparent",
+  overflow: "visible",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const imgStyle = {
   width: "100%",
   height: "100%",
   objectFit: "contain",
-  opacity: 0.85,
+  opacity: 0.9,
+  mixBlendMode: "screen",
+  filter: "drop-shadow(0 18px 36px rgba(0,0,0,0.45))",
 };
 
 const point = {
   position: "absolute",
-  width: "14px",
-  height: "14px",
+  width: "24px",
+  height: "24px",
   borderRadius: "50%",
-  background: "#38bdf8",
-  boxShadow: "0 0 12px rgba(56,189,248,0.8)",
+  border: "2px solid rgba(56,189,248,0.95)",
+  boxShadow: "0 0 20px rgba(56,189,248,0.85)",
+  display: "grid",
+  placeItems: "center",
+  pointerEvents: "none",
 };
 
-/* 🔥 IMPORTANT: these are percentage-based → works with ANY image */
 const headPoint = {
-  top: "18%",
+  top: "15%",
   left: "50%",
   transform: "translate(-50%, -50%)",
 };
 
 const chestPoint = {
-  top: "38%",
+  top: "32%",
   left: "50%",
   transform: "translate(-50%, -50%)",
 };
 
+const pointCore = {
+  width: "7px",
+  height: "7px",
+  borderRadius: "50%",
+  background: "#e0f2fe",
+};
+
 const legend = {
-  width: "100%",
-  display: "grid",
-  gap: "8px",
+  display: "flex",
+  justifyContent: "center",
+  gap: "18px",
+  flexWrap: "wrap",
 };
 
 const legendItem = {

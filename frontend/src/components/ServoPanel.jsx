@@ -19,7 +19,7 @@ export default function ServoPanel({ systemState }) {
 const card = {
   background: "#0f172a",
   border: "1px solid #1e293b",
-  borderRadius: "16px",
+  borderRadius: "8px",
   padding: "18px",
   boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
 };
