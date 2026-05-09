@@ -16,3 +16,12 @@ This module represents the "Brain" of the sentry turret. Running locally on a NV
 3. Ensure the ESP32-CAM is powered on and streaming to your local network.
 4. Update the IP address in `main_tracker.py` to match your ESP32-CAM's IP.
 5. Run the tracker: `python main_tracker.py`
+
+## Benchmarks
+The benchmark suite lives in `benchmarks/` and covers the evaluation plan from the project document:
+
+* COCO-Pose accuracy comparison for YOLOv8-Pose vs. MediaPipe BlazePose.
+* Live webcam/stream latency, FPS, and confidence degradation.
+* ByteTrack vs. DeepSORT tracking evaluation using MOTA, ID switches, precision, recall, and IoU.
+
+Install benchmark dependencies with `pip install -r requirements-benchmark.txt`, then see `benchmarks/README.md` for the exact commands and CSV schemas.
