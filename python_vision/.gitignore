@@ -1,0 +1,31 @@
+# Ignore Python bytecode files
+__pycache__/
+*.py[cod]
+
+# Ignore virtual environment
+venv/
+.venv/
+env/
+
+# Ignore IDE configuration files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore Jupyter notebooks
+*.ipynb
+
+# Ignore temporary files
+*.tmp
+*.log
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore dataset and model files (large files)
+Dataset.mp4
+dataset_frames/
+trained_model.pth
+trained_model.tflite
