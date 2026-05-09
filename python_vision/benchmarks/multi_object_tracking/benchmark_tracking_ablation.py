@@ -7,6 +7,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+from config import (
+    DEFAULT_CONF_THRESHOLD,
+    DEFAULT_DETECTOR,
+    DEFAULT_DEVICE,
+    DEFAULT_TRACKERS,
+    GROUND_TRUTH_PATH,
+    OUTPUT_FOLDER,
+    VIDEO_PATH,
+)
+
 
 def require_module(module_name: str, install_hint: str):
     try:
@@ -259,13 +269,13 @@ def print_summary(report: dict[str, Any]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Tracking ablation study for temporal identity consistency.")
-    parser.add_argument("--video", type=Path, required=True, help="Path to custom tracking video.")
-    parser.add_argument("--ground-truth", type=Path, required=True, help="MOTChallenge-style ground-truth CSV/TXT.")
-    parser.add_argument("--output", type=Path, default=Path("benchmark_results"))
-    parser.add_argument("--detector", default="yolov8n-pose.pt")
-    parser.add_argument("--trackers", default="bytetrack,deepsort")
-    parser.add_argument("--conf-threshold", type=float, default=0.25)
-    parser.add_argument("--device", default="auto")
+    parser.add_argument("--video", type=Path, default=VIDEO_PATH, help="Path to custom tracking video.")
+    parser.add_argument("--ground-truth", type=Path, default=GROUND_TRUTH_PATH, help="MOTChallenge-style ground-truth CSV/TXT.")
+    parser.add_argument("--output", type=Path, default=OUTPUT_FOLDER)
+    parser.add_argument("--detector", default=DEFAULT_DETECTOR)
+    parser.add_argument("--trackers", default=DEFAULT_TRACKERS)
+    parser.add_argument("--conf-threshold", type=float, default=DEFAULT_CONF_THRESHOLD)
+    parser.add_argument("--device", default=DEFAULT_DEVICE)
     return parser.parse_args()
 
 

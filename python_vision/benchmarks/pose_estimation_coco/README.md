@@ -6,6 +6,12 @@ Script:
 benchmark_vision_coco.py
 ```
 
+Editable config:
+
+```text
+config.py
+```
+
 This benchmark measures pure skeleton accuracy on a COCO-Pose validation subset. It compares YOLO pose models against MediaPipe BlazePose using:
 
 - official COCO keypoint `mAP`, `AP50`, `AP75`, and `AR` through `pycocotools`
@@ -21,7 +27,7 @@ Required:
 - COCO validation images folder, for example `val2017`
 - COCO keypoint annotations, for example `person_keypoints_val2017.json`
 
-By default, the script looks for:
+By default, `config.py` points to:
 
 ```text
 images/
@@ -50,6 +56,12 @@ MediaPipe BlazePose is also evaluated once.
 
 ```bash
 python benchmark_vision_coco.py --images C:\datasets\coco\val2017 --annotations C:\datasets\coco\annotations\person_keypoints_val2017.json --output output --limit 200 --yolo-model all
+```
+
+You can also edit `config.py` and run:
+
+```bash
+python benchmark_vision_coco.py
 ```
 
 ## Outputs

@@ -4,25 +4,20 @@ import argparse
 import csv
 import importlib
 import json
-import os
 import statistics
 import time
 from pathlib import Path
 from typing import Any
 
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VIDEO_PATH = Path(os.path.join(SCRIPT_DIR, "Dataset.mp4"))
-OUTPUT_FOLDER = Path(os.path.join(SCRIPT_DIR, "output"))
-
-YOLO_POSE_MODELS = {
-    "yolov8n": "yolov8n-pose.pt",
-    "yolov8s": "yolov8s-pose.pt",
-    "yolov8m": "yolov8m-pose.pt",
-    "yolo11n": "yolo11n-pose.pt",
-    "yolo11s": "yolo11s-pose.pt",
-    "yolo11m": "yolo11m-pose.pt",
-}
+from config import (
+    DEFAULT_CONF_THRESHOLD,
+    DEFAULT_DEVICE,
+    DEFAULT_SAMPLE_RATE,
+    DEFAULT_YOLO_MODEL,
+    OUTPUT_FOLDER,
+    VIDEO_PATH,
+    YOLO_POSE_MODELS,
+)
 
 
 def require_module(module_name: str, install_hint: str):
@@ -311,12 +306,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=OUTPUT_FOLDER)
     parser.add_argument(
         "--yolo-model",
-        default="all",
+        default=DEFAULT_YOLO_MODEL,
         help="Use 'all' for YOLOv8/YOLO11 nano, small, and medium, a named variant like yolov8n, or a .pt path.",
     )
-    parser.add_argument("--device", default="auto")
-    parser.add_argument("--conf-threshold", type=float, default=0.25)
-    parser.add_argument("--sample-rate", type=int, default=1, help="Evaluate every N frames.")
+    parser.add_argument("--device", default=DEFAULT_DEVICE)
+    parser.add_argument("--conf-threshold", type=float, default=DEFAULT_CONF_THRESHOLD)
+    parser.add_argument("--sample-rate", type=int, default=DEFAULT_SAMPLE_RATE, help="Evaluate every N frames.")
     return parser.parse_args()
 
 

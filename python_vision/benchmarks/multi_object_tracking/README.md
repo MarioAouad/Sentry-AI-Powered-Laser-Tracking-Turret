@@ -6,6 +6,12 @@ Script:
 benchmark_tracking_ablation.py
 ```
 
+Editable config:
+
+```text
+config.py
+```
+
 This benchmark measures temporal identity consistency on a custom tracking video. It compares available trackers such as ByteTrack and DeepSORT using MOT metrics:
 
 - MOTA
@@ -36,6 +42,12 @@ frame,id,x,y,w,h,conf,class,visibility
 
 ```bash
 python benchmark_tracking_ablation.py --video tracking_video.mp4 --ground-truth ground_truth.txt --output output --trackers bytetrack,deepsort
+```
+
+You can also edit `config.py` and run:
+
+```bash
+python benchmark_tracking_ablation.py
 ```
 
 ## Outputs

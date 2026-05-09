@@ -6,6 +6,12 @@ Script:
 benchmark_vision_hardware.py
 ```
 
+Editable config:
+
+```text
+config.py
+```
+
 This benchmark measures real-world runtime performance on a custom video or webcam. It compares YOLO pose models on GPU when available against MediaPipe BlazePose on CPU using:
 
 - FPS
@@ -22,7 +28,7 @@ Required:
 
 - `Dataset.mp4`, or use `--webcam`
 
-By default, the script looks for:
+By default, `config.py` points to:
 
 ```text
 Dataset.mp4
@@ -56,6 +62,12 @@ Webcam:
 
 ```bash
 python benchmark_vision_hardware.py --webcam --output output --yolo-model all
+```
+
+You can also edit `config.py` and run:
+
+```bash
+python benchmark_vision_hardware.py
 ```
 
 ## Outputs
