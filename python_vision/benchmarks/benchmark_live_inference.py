@@ -4,16 +4,28 @@ import argparse
 import importlib
 from pathlib import Path
 
-from common import Timer, stats_to_dict, summarize_latency, write_csv, write_json
+from common import (
+    YOLO_POSE_MODELS,
+    Timer,
+    resolve_yolo_model_path,
+    stats_to_dict,
+    summarize_latency,
+    write_csv,
+    write_json,
+)
 
 
-def load_model(model_name: str, model_path: str | None):
+def benchmark_name(args: argparse.Namespace) -> str:
+    return args.yolo_variant if args.model == "yolo" else args.model
+
+
+def load_model(model_name: str, yolo_variant: str, model_path: str | None):
     if model_name == "yolo":
         try:
             ultralytics = importlib.import_module("ultralytics")
         except ImportError as exc:
             raise SystemExit("Install ultralytics to run YOLO live benchmarks: pip install ultralytics") from exc
-        return ultralytics.YOLO(model_path or "yolov8n-pose.pt")
+        return ultralytics.YOLO(resolve_yolo_model_path(yolo_variant, model_path))
     if model_name == "mediapipe":
         try:
             mediapipe = importlib.import_module("mediapipe")
@@ -56,7 +68,7 @@ def run(args: argparse.Namespace) -> dict:
     if not capture.isOpened():
         raise SystemExit(f"Could not open video source: {args.source}")
 
-    model = load_model(args.model, args.model_path)
+    model = load_model(args.model, args.yolo_variant, args.model_path)
     latencies: list[float] = []
     confidences: list[float] = []
     rows: list[dict] = []
@@ -87,16 +99,31 @@ def run(args: argparse.Namespace) -> dict:
 
     capture.release()
     stats = summarize_latency(latencies, confidences)
-    payload = {"model": args.model, "source": str(args.source), "stats": stats_to_dict(stats)}
-    write_json(args.output / f"live_{args.model}_summary.json", payload)
-    write_csv(args.output / f"live_{args.model}_frames.csv", rows)
+    name = benchmark_name(args)
+    payload = {
+        "model": name,
+        "model_type": args.model,
+        "model_path": resolve_yolo_model_path(args.yolo_variant, args.model_path)
+        if args.model == "yolo"
+        else None,
+        "source": str(args.source),
+        "stats": stats_to_dict(stats),
+    }
+    write_json(args.output / f"live_{name}_summary.json", payload)
+    write_csv(args.output / f"live_{name}_frames.csv", rows)
     return payload
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark live webcam/video inference FPS, latency, and confidence.")
     parser.add_argument("--model", choices=("yolo", "mediapipe"), required=True)
-    parser.add_argument("--model-path", help="YOLO pose model path. Defaults to yolov8n-pose.pt.")
+    parser.add_argument(
+        "--yolo-variant",
+        choices=tuple(YOLO_POSE_MODELS.keys()),
+        default="yolov8n",
+        help="Named YOLO pose model to use when --model yolo.",
+    )
+    parser.add_argument("--model-path", help="Custom YOLO pose model path. Overrides --yolo-variant.")
     parser.add_argument("--source", default="0", help="Webcam index, video file, or stream URL.")
     parser.add_argument("--frames", type=int, default=300)
     parser.add_argument("--warmup", type=int, default=20)

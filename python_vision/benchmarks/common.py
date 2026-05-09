@@ -31,6 +31,25 @@ COCO_OKS_SIGMAS = (
     0.89,
 )
 
+YOLO_POSE_MODELS = {
+    "yolov8n": "yolov8n-pose.pt",
+    "yolov8s": "yolov8s-pose.pt",
+    "yolov8m": "yolov8m-pose.pt",
+    "yolo11n": "yolo11n-pose.pt",
+    "yolo11s": "yolo11s-pose.pt",
+    "yolo11m": "yolo11m-pose.pt",
+}
+
+
+def resolve_yolo_model_path(yolo_variant: str, model_path: str | None) -> str:
+    if model_path:
+        return model_path
+    try:
+        return YOLO_POSE_MODELS[yolo_variant]
+    except KeyError as exc:
+        known = ", ".join(sorted(YOLO_POSE_MODELS))
+        raise ValueError(f"Unknown YOLO variant '{yolo_variant}'. Expected one of: {known}") from exc
+
 
 @dataclass
 class LatencyStats:
@@ -134,4 +153,3 @@ class Timer:
 
     def __exit__(self, *_: object) -> None:
         self.elapsed_ms = (time.perf_counter() - self.started) * 1000.0
-

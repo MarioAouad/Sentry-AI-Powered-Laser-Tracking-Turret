@@ -5,7 +5,15 @@ import importlib
 import json
 from pathlib import Path
 
-from common import Timer, coco_oks, stats_to_dict, summarize_latency, write_json
+from common import (
+    YOLO_POSE_MODELS,
+    Timer,
+    coco_oks,
+    resolve_yolo_model_path,
+    stats_to_dict,
+    summarize_latency,
+    write_json,
+)
 
 
 def load_coco_people(annotation_path: Path, limit: int | None) -> list[dict]:
@@ -68,13 +76,17 @@ def predict_mediapipe(model, image_path: Path) -> tuple[list[list[float]] | None
     return points, float(confidence)
 
 
-def load_model(name: str, model_path: str | None):
+def benchmark_name(args: argparse.Namespace) -> str:
+    return args.yolo_variant if args.model == "yolo" else args.model
+
+
+def load_model(name: str, yolo_variant: str, model_path: str | None):
     if name == "yolo":
         try:
             ultralytics = importlib.import_module("ultralytics")
         except ImportError as exc:
             raise SystemExit("Install ultralytics to run YOLO COCO benchmarks.") from exc
-        return ultralytics.YOLO(model_path or "yolov8n-pose.pt")
+        return ultralytics.YOLO(resolve_yolo_model_path(yolo_variant, model_path))
     if name == "mediapipe":
         try:
             mediapipe = importlib.import_module("mediapipe")
@@ -84,9 +96,9 @@ def load_model(name: str, model_path: str | None):
     raise ValueError(name)
 
 
-def run(args: argparse.Namespace) -> dict:
-    people = load_coco_people(args.annotations, args.limit)
-    model = load_model(args.model, args.model_path)
+def run_one(args: argparse.Namespace, people: list[dict], yolo_variant: str | None = None) -> dict:
+    selected_variant = yolo_variant or args.yolo_variant
+    model = load_model(args.model, selected_variant, args.model_path)
     latencies: list[float] = []
     confidences: list[float] = []
     oks_scores: list[float] = []
@@ -115,22 +127,47 @@ def run(args: argparse.Namespace) -> dict:
         else 0.0
         for threshold in thresholds
     }
+    name = selected_variant if args.model == "yolo" else benchmark_name(args)
     payload = {
-        "model": args.model,
+        "model": name,
+        "model_type": args.model,
+        "model_path": resolve_yolo_model_path(selected_variant, args.model_path)
+        if args.model == "yolo"
+        else None,
         "samples": len(people),
         "detection_rate": detections / len(people) if people else 0.0,
         "mean_oks": sum(oks_scores) / len(oks_scores) if oks_scores else 0.0,
         "ap": ap_by_threshold,
         "latency": stats_to_dict(summarize_latency(latencies, confidences)),
     }
-    write_json(args.output / f"pose_coco_{args.model}.json", payload)
+    write_json(args.output / f"pose_coco_{name}.json", payload)
     return payload
+
+
+def run(args: argparse.Namespace) -> dict:
+    if args.model == "yolo" and args.yolo_variant == "all" and args.model_path:
+        raise SystemExit("--model-path cannot be combined with --yolo-variant all.")
+
+    people = load_coco_people(args.annotations, args.limit)
+    if args.model == "yolo" and args.yolo_variant == "all":
+        results = [run_one(args, people, variant) for variant in YOLO_POSE_MODELS]
+        payload = {"model": "all_yolo_pose_variants", "samples": len(people), "results": results}
+        write_json(args.output / "pose_coco_all_yolo.json", payload)
+        return payload
+
+    return run_one(args, people)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark pose accuracy on a COCO-Pose subset.")
     parser.add_argument("--model", choices=("yolo", "mediapipe"), required=True)
-    parser.add_argument("--model-path", help="YOLO pose model path. Defaults to yolov8n-pose.pt.")
+    parser.add_argument(
+        "--yolo-variant",
+        choices=tuple(YOLO_POSE_MODELS.keys()) + ("all",),
+        default="yolov8n",
+        help="Named YOLO pose model to use when --model yolo. Use 'all' for YOLOv8/YOLO11 nano, small, and medium.",
+    )
+    parser.add_argument("--model-path", help="Custom YOLO pose model path. Overrides --yolo-variant.")
     parser.add_argument("--images", type=Path, required=True, help="Directory containing COCO images.")
     parser.add_argument("--annotations", type=Path, required=True, help="COCO person_keypoints JSON file.")
     parser.add_argument("--limit", type=int, default=200)
