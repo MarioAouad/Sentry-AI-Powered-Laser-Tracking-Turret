@@ -1,0 +1,102 @@
+# =============================================================================
+# SENTRY AI — Hardware Offsets & Calibration Constants
+# =============================================================================
+# This file defines the physical spatial relationship between the vision sensor
+# (laptop webcam) and the actuation hardware (pan/tilt turret). All distance
+# values are in CENTIMETERS. Update these with real ruler measurements before
+# deploying the system.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 1. CAMERA INTRINSICS
+# ---------------------------------------------------------------------------
+camera:
+  # OpenCV VideoCapture device index (0 = default laptop webcam)
+  device_index: 0
+
+  # Capture resolution (must match what the webcam actually delivers)
+  frame_width: 640
+  frame_height: 480
+
+  # Horizontal field-of-view in degrees. Most laptop webcams are ~60-70°.
+  # Used to derive focal_length_px = (frame_width / 2) / tan(fov_h_deg / 2)
+  fov_h_deg: 62.0
+
+# ---------------------------------------------------------------------------
+# 2. PHYSICAL OFFSET VECTOR (Camera → Turret Origin)
+# ---------------------------------------------------------------------------
+# Measured from the CENTER of the webcam lens to the ROTATIONAL CENTER of
+# the pan/tilt bracket. Positive directions:
+#   X = rightward (from camera's perspective)
+#   Y = downward
+#   Z = forward (away from camera, toward the scene)
+turret_offset_cm:
+  x: 52.0    # Horizontal distance (cm) — measure with a ruler
+  y: 27.0   # Vertical distance (cm) — negative = turret is above camera
+  z: 47.0    # Depth distance (cm) — how far in front of the camera the turret sits
+
+# ---------------------------------------------------------------------------
+# 3. HUMAN BIOMETRICS (Constants for Depth Estimation)
+# ---------------------------------------------------------------------------
+# Average adult bi-acromial (shoulder-to-shoulder) width in centimeters.
+# This is physiologically stable regardless of posture, making it ideal
+# for pseudo-depth estimation via the inverse width-distance relationship.
+biometrics:
+  shoulder_width_cm: 40.0
+
+# ---------------------------------------------------------------------------
+# 4. SIGNAL FILTER TUNING
+# ---------------------------------------------------------------------------
+filters:
+  # Exponential Moving Average smoothing factor (0 < α ≤ 1)
+  # Lower α = more smoothing (slower response), Higher α = less smoothing (faster)
+  # Recommended: 0.25–0.40 for turret servo stability
+  ema_alpha: 0.35
+
+  # Rolling median window size (odd number, applied BEFORE the EMA)
+  # Rejects single-frame AI bounding-box glitches
+  median_window: 5
+
+# ---------------------------------------------------------------------------
+# 5. SERIAL COMMUNICATION
+# ---------------------------------------------------------------------------
+serial:
+  # Default COM port for the ESP32 USB-to-TTL tether
+  port: "COM5"
+
+  # Baud rate — MUST match Config.h BAUD_RATE on the ESP32
+  baud_rate: 115200
+
+  # Maximum seconds to wait before retrying a failed serial connection
+  reconnect_timeout_sec: 5.0
+
+  # Auto-detect the ESP32 COM port if the specified port fails
+  auto_detect: true
+
+# ---------------------------------------------------------------------------
+# 6. VISION PIPELINE TUNING
+# ---------------------------------------------------------------------------
+vision:
+  # HOG+SVM cascade: minimum consecutive detections before waking YOLO
+  hog_min_consecutive: 3
+
+  # HOG+SVM cascade: detection confidence threshold for detectMultiScale
+  hog_hit_threshold: 0.3
+
+  # YOLO confidence threshold for person detection
+  yolo_confidence: 0.45
+
+  # Seconds without a valid YOLO track before falling back to HOG scanning
+  track_lost_timeout_sec: 2.0
+
+  # Default target body part: "head", "chest", or "hand"
+  default_target_mode: "chest"
+
+# ---------------------------------------------------------------------------
+# 7. API SERVER
+# ---------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+  # Telemetry broadcast interval in seconds (how often the WS pushes updates)
+  telemetry_interval_sec: 0.1
