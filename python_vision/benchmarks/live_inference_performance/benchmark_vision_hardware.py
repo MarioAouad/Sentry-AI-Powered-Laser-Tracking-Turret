@@ -12,10 +12,10 @@ from typing import Any
 from config import (
     DEFAULT_CONF_THRESHOLD,
     DEFAULT_DEVICE,
+    DEFAULT_IMAGES_DIR,
+    DEFAULT_OUTPUT_DIR,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_YOLO_MODEL,
-    OUTPUT_FOLDER,
-    VIDEO_PATH,
     YOLO_POSE_MODELS,
 )
 
@@ -113,26 +113,28 @@ def frame_brightness(cv2, frame) -> float:
 
 def collect_frames(args: argparse.Namespace) -> tuple[list[tuple[int, float, Any]], str]:
     cv2 = require_module("cv2", "pip install opencv-python")
-    source: str | int = 0 if args.webcam else str(args.video)
-    if not args.webcam and not Path(args.video).exists():
-        raise SystemExit(f"Video file not found: {args.video}")
-    capture = cv2.VideoCapture(source)
-    if not capture.isOpened():
-        raise SystemExit(f"Could not open video source: {source}")
+    images_dir = Path(args.images_dir)
+    if not images_dir.exists() or not images_dir.is_dir():
+        raise SystemExit(f"Images folder not found or is not a directory: {images_dir}")
 
-    source_fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
     frames: list[tuple[int, float, Any]] = []
-    frame_index = 0
-    while True:
-        ok, frame = capture.read()
-        if not ok:
-            break
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    image_paths = sorted([p for p in images_dir.iterdir() if p.suffix.lower() in image_extensions])
+
+    if not image_paths:
+        raise SystemExit(f"No images found in: {images_dir}")
+
+    source_fps = 30.0
+    for frame_index, img_path in enumerate(image_paths):
         if frame_index % args.sample_rate == 0:
-            timestamp = frame_index / source_fps
-            frames.append((frame_index, timestamp, frame))
-        frame_index += 1
-    capture.release()
-    return frames, str(source)
+            frame = cv2.imread(str(img_path))
+            if frame is not None:
+                timestamp = frame_index / source_fps
+                frames.append((frame_index, timestamp, frame))
+            else:
+                print(f"Warning: Could not read {img_path}")
+                
+    return frames, str(images_dir)
 
 
 def benchmark_yolo(
@@ -300,10 +302,9 @@ def print_summary(report: dict[str, Any]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark real video/webcam inference performance and robustness.")
-    parser.add_argument("--video", type=Path, default=VIDEO_PATH)
-    parser.add_argument("--webcam", action="store_true", help="Use webcam index 0 instead of --video.")
-    parser.add_argument("--output", type=Path, default=OUTPUT_FOLDER)
+    parser = argparse.ArgumentParser(description="Benchmark real image inference performance and robustness.")
+    parser.add_argument("--images-dir", type=Path, default=DEFAULT_IMAGES_DIR, help="Path to images directory.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument(
         "--yolo-model",
         default=DEFAULT_YOLO_MODEL,
@@ -317,7 +318,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_dir = ensure_output_dir(args.output)
+    
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = ensure_output_dir(args.output / f"run_{timestamp}")
+    
     device = resolve_device(args.device)
     frames, source = collect_frames(args)
     if not frames:

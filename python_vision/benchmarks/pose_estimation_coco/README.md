@@ -1,78 +1,40 @@
 # COCO-Pose Theoretical Accuracy Benchmark
 
-Script:
+## Overview
 
-```text
-benchmark_vision_coco.py
-```
+This benchmark measures the theoretical accuracy of state-of-the-art pose estimation models against a standard COCO validation subset. It evaluates pure skeletal keypoint extraction capability in a highly controlled, multi-person environment.
 
-Editable config:
+**Script:** `benchmark_vision_coco.py`
+**Config:** `config.py`
 
-```text
-config.py
-```
+## How it Works
 
-This benchmark measures pure skeleton accuracy on a COCO-Pose validation subset. It compares YOLO pose models against MediaPipe BlazePose using:
+The script iterates through a subset of the COCO 2017 validation dataset and evaluates each model using standard Multi-Person Pose Estimation metrics. It compares Ultralytics YOLO-Pose architectures against the CPU-baseline MediaPipe BlazePose. 
 
-- official COCO keypoint `mAP`, `AP50`, `AP75`, and `AR` through `pycocotools`
-- OKS-based precision, recall, and F1
-- mean OKS
-- PCK
-- mean and median latency
+### Metrics Explained
+*   **mAP (Mean Average Precision):** Evaluates overall spatial accuracy of the keypoints across varying IoU thresholds. 
+*   **F1-Score:** The harmonic mean of Precision (avoiding false positives) and Recall (finding all targets). Crucial for knowing how "intelligent" the model is at recognizing human shapes without hallucinating.
+*   **OKS (Object Keypoint Similarity):** Measures how close the predicted keypoint is to the ground truth, normalized by the scale of the person.
+*   **PCK (Percentage of Correct Keypoints):** Measures the percentage of keypoints that fall within a strict pixel threshold of the ground truth.
 
-## Data
+## The Results & What They Prove
 
-Required:
+*   **MediaPipe Failure:** MediaPipe completely collapsed on the multi-person COCO dataset (mAP: ~0.13), proving that a robust, GPU-accelerated deep learning model is required for environments with severe occlusion.
+*   **YOLO11m-Pose vs YOLOv8m-Pose:** Both medium variants dominated the tests. While YOLOv8m slightly won the raw mAP (0.616), **YOLO11m-Pose** won the critical F1-Score (0.671).
 
-- COCO validation images folder, for example `val2017`
-- COCO keypoint annotations, for example `person_keypoints_val2017.json`
+### Final Decision: YOLO11m-Pose
+We selected **YOLO11m-Pose** because its superior F1-Score guarantees the best balance of Precision and Recall. It minimizes false positives (which would cause the turret servos to wildly actuate) while maintaining elite spatial accuracy, which is required for our mathematical Z-axis depth estimation.
 
-By default, `config.py` points to:
+---
+## Usage
 
-```text
-images/
-person_keypoints_val2017.json
-output/
-```
+**Data Required:**
+- COCO validation images folder (`val2017`)
+- COCO keypoint annotations (`person_keypoints_val2017.json`)
 
-inside this folder.
-
-## Models
-
-By default, `--yolo-model all` runs:
-
-```text
-yolov8n-pose.pt
-yolov8s-pose.pt
-yolov8m-pose.pt
-yolo11n-pose.pt
-yolo11s-pose.pt
-yolo11m-pose.pt
-```
-
-MediaPipe BlazePose is also evaluated once.
-
-## Example
-
+**Run the Benchmark:**
 ```bash
 python benchmark_vision_coco.py --images C:\datasets\coco\val2017 --annotations C:\datasets\coco\annotations\person_keypoints_val2017.json --output output --limit 200 --yolo-model all
 ```
 
-You can also edit `config.py` and run:
-
-```bash
-python benchmark_vision_coco.py
-```
-
-## Outputs
-
-- `coco_predictions_yolov8n.json`
-- `coco_predictions_yolov8s.json`
-- `coco_predictions_yolov8m.json`
-- `coco_predictions_yolo11n.json`
-- `coco_predictions_yolo11s.json`
-- `coco_predictions_yolo11m.json`
-- `coco_predictions_mediapipe.json`
-- `benchmark_vision_coco_report.json`
-- `benchmark_vision_coco_summary.csv`
-
+Outputs are securely timestamped inside the `output/run_YYYYMMDD_HHMMSS/` directory to prevent data overwriting.

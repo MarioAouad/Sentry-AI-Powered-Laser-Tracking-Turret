@@ -55,6 +55,10 @@ benchmarks/pose_estimation_coco/person_keypoints_val2017.json
 # Ignore pose estimation benchmark outputs
 benchmarks/pose_estimation_coco/output/*
 !benchmarks/pose_estimation_coco/output/.gitkeep
+benchmarks/live_inference_performance/output/*
+!benchmarks/live_inference_performance/output/.gitkeep
+benchmarks/multi_object_tracking/output/*
+!benchmarks/multi_object_tracking/output/.gitkeep
 
 # ==========================================
 # 4. IDEs, TOOLS & CONFIGURATION

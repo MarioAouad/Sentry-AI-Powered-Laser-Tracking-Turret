@@ -4,6 +4,7 @@ import argparse
 import csv
 import importlib
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +13,9 @@ from config import (
     DEFAULT_DETECTOR,
     DEFAULT_DEVICE,
     DEFAULT_TRACKERS,
-    GROUND_TRUTH_PATH,
+    IMAGES_DIR,
+    LABELS_DIR,
     OUTPUT_FOLDER,
-    VIDEO_PATH,
 )
 
 
@@ -82,6 +83,49 @@ def parse_mot_file(path: Path) -> dict[int, list[dict[str, Any]]]:
     return tracks
 
 
+def parse_yolo_labels(labels_dir: Path, images_dir: Path) -> dict[int, list[dict[str, Any]]]:
+    cv2 = optional_module("cv2")
+    tracks: dict[int, list[dict[str, Any]]] = {}
+    label_files = sorted([p for p in labels_dir.iterdir() if p.suffix == ".txt" and p.stem != ".gitkeep"])
+    image_files = sorted([p for p in images_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"} and p.stem != ".gitkeep"])
+    
+    for frame_index, (label_path, img_path) in enumerate(zip(label_files, image_files), start=1):
+        if cv2 is not None:
+            img = cv2.imread(str(img_path))
+            h_img, w_img = img.shape[:2] if img is not None else (640, 640)
+        else:
+            h_img, w_img = 640, 640
+
+        with label_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.strip().split()
+                if not parts:
+                    continue
+                coords = [float(p) for p in parts[1:]]
+                if len(coords) == 4:
+                    x_center, y_center, width, height = coords
+                    xmin = (x_center - width / 2) * w_img
+                    ymin = (y_center - height / 2) * h_img
+                    w_abs = width * w_img
+                    h_abs = height * h_img
+                else:
+                    x_coords = coords[0::2]
+                    y_coords = coords[1::2]
+                    xmin = min(x_coords) * w_img
+                    xmax = max(x_coords) * w_img
+                    ymin = min(y_coords) * h_img
+                    ymax = max(y_coords) * h_img
+                    w_abs = xmax - xmin
+                    h_abs = ymax - ymin
+                
+                tracks.setdefault(frame_index, []).append({
+                    "id": 1, 
+                    "bbox": [xmin, ymin, w_abs, h_abs], 
+                    "visibility": 1.0
+                })
+    return tracks
+
+
 def xywh_to_xyxy(bbox: list[float]) -> list[float]:
     x, y, w, h = bbox
     return [x, y, x + w, y + h]
@@ -105,36 +149,39 @@ def run_bytetrack(args: argparse.Namespace, output_dir: Path) -> Path | None:
 
     model = ultralytics.YOLO(args.detector)
     rows: list[dict[str, Any]] = []
-    results = model.track(
-        source=str(args.video),
-        tracker="bytetrack.yaml",
-        conf=args.conf_threshold,
-        device=resolve_device(args.device),
-        persist=True,
-        stream=True,
-        verbose=False,
-    )
-    for frame_index, result in enumerate(results, start=1):
-        if result.boxes is None or result.boxes.id is None:
-            continue
-        boxes = result.boxes.xywh.cpu().tolist()
-        ids = result.boxes.id.cpu().tolist()
-        confs = result.boxes.conf.cpu().tolist() if result.boxes.conf is not None else [1.0] * len(boxes)
-        for bbox, track_id, conf in zip(boxes, ids, confs):
-            cx, cy, w, h = [float(value) for value in bbox]
-            rows.append(
-                {
-                    "frame": frame_index,
-                    "id": int(track_id),
-                    "x": cx - w / 2,
-                    "y": cy - h / 2,
-                    "w": w,
-                    "h": h,
-                    "conf": float(conf),
-                    "class": 1,
-                    "visibility": 1.0,
-                }
-            )
+    
+    image_paths = sorted([p for p in args.images_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"} and p.stem != ".gitkeep"])
+    
+    for frame_index, img_path in enumerate(image_paths, start=1):
+        results = model.track(
+            source=str(img_path),
+            tracker="bytetrack.yaml",
+            conf=args.conf_threshold,
+            device=resolve_device(args.device),
+            persist=True,
+            verbose=False,
+        )
+        for result in results:
+            if result.boxes is None or result.boxes.id is None:
+                continue
+            boxes = result.boxes.xywh.cpu().tolist()
+            ids = result.boxes.id.cpu().tolist()
+            confs = result.boxes.conf.cpu().tolist() if result.boxes.conf is not None else [1.0] * len(boxes)
+            for bbox, track_id, conf in zip(boxes, ids, confs):
+                cx, cy, w, h = [float(value) for value in bbox]
+                rows.append(
+                    {
+                        "frame": frame_index,
+                        "id": int(track_id),
+                        "x": cx - w / 2,
+                        "y": cy - h / 2,
+                        "w": w,
+                        "h": h,
+                        "conf": float(conf),
+                        "class": 1,
+                        "visibility": 1.0,
+                    }
+                )
     path = output_dir / "bytetrack_predictions.csv"
     write_csv(path, rows)
     return path
@@ -156,14 +203,14 @@ def run_deepsort(args: argparse.Namespace, output_dir: Path) -> Path | None:
 
     tracker = deep_sort_mod.DeepSort(max_age=30)
     model = ultralytics.YOLO(args.detector)
-    capture = cv2.VideoCapture(str(args.video))
     rows: list[dict[str, Any]] = []
-    frame_index = 1
+    
+    image_paths = sorted([p for p in args.images_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"} and p.stem != ".gitkeep"])
 
-    while True:
-        ok, frame = capture.read()
-        if not ok:
-            break
+    for frame_index, img_path in enumerate(image_paths, start=1):
+        frame = cv2.imread(str(img_path))
+        if frame is None:
+            continue
         detections = []
         result = model.predict(frame, conf=args.conf_threshold, device=resolve_device(args.device), verbose=False)[0]
         if result.boxes is not None:
@@ -190,9 +237,7 @@ def run_deepsort(args: argparse.Namespace, output_dir: Path) -> Path | None:
                     "visibility": 1.0,
                 }
             )
-        frame_index += 1
 
-    capture.release()
     path = output_dir / "deepsort_predictions.csv"
     write_csv(path, rows)
     return path
@@ -269,8 +314,8 @@ def print_summary(report: dict[str, Any]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Tracking ablation study for temporal identity consistency.")
-    parser.add_argument("--video", type=Path, default=VIDEO_PATH, help="Path to custom tracking video.")
-    parser.add_argument("--ground-truth", type=Path, default=GROUND_TRUTH_PATH, help="MOTChallenge-style ground-truth CSV/TXT.")
+    parser.add_argument("--images-dir", type=Path, default=IMAGES_DIR, help="Path to custom tracking images.")
+    parser.add_argument("--labels-dir", type=Path, default=LABELS_DIR, help="Path to Roboflow YOLO labels.")
     parser.add_argument("--output", type=Path, default=OUTPUT_FOLDER)
     parser.add_argument("--detector", default=DEFAULT_DETECTOR)
     parser.add_argument("--trackers", default=DEFAULT_TRACKERS)
@@ -281,13 +326,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_dir = ensure_output_dir(args.output)
-    if not args.video.exists():
-        raise SystemExit(f"Video file not found: {args.video}")
-    if not args.ground_truth.exists():
-        raise SystemExit(f"Ground-truth file not found: {args.ground_truth}")
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = ensure_output_dir(args.output / f"run_{timestamp}")
+    
+    if not args.images_dir.exists():
+        raise SystemExit(f"Images directory not found: {args.images_dir}")
+    if not args.labels_dir.exists():
+        raise SystemExit(f"Labels directory not found: {args.labels_dir}")
 
-    ground_truth = parse_mot_file(args.ground_truth)
+    ground_truth = parse_yolo_labels(args.labels_dir, args.images_dir)
     prediction_paths: dict[str, Path] = {}
     selected_trackers = [item.strip().lower() for item in args.trackers.split(",") if item.strip()]
 
@@ -307,8 +354,8 @@ def main() -> None:
 
     report = {
         "benchmark": "tracking_ablation_custom_video",
-        "video": str(args.video),
-        "ground_truth": str(args.ground_truth),
+        "images_dir": str(args.images_dir),
+        "labels_dir": str(args.labels_dir),
         "trackers": tracker_reports,
         "winner_summary": {
             "best_MOTA": winner(tracker_reports, "MOTA"),
