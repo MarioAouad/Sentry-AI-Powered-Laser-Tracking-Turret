@@ -31,9 +31,21 @@ camera:
 #   Y = downward
 #   Z = forward (away from camera, toward the scene)
 turret_offset_cm:
-  x: 52.0    # Horizontal distance (cm) — measure with a ruler
+  x: 0.0    # Horizontal distance (cm) — measure with a ruler
   y: 27.0   # Vertical distance (cm) — negative = turret is above camera
   z: 47.0    # Depth distance (cm) — how far in front of the camera the turret sits
+
+# ---------------------------------------------------------------------------
+# 2b. SERVO DIRECTION MULTIPLIERS
+# ---------------------------------------------------------------------------
+# Corrects for physical servo mounting direction.
+# Set to  1 if increasing angle moves the laser in the SAME direction as the math.
+# Set to -1 if the servo is mounted backwards (inverted).
+# Your test script proved: pan 90 = center. These flags fix which
+# direction pan > 90 and tilt > 90 physically move the laser.
+servo_direction:
+  pan:  -1   # -1 = invert pan (you reported: go left → turret goes right)
+  tilt: -1   # -1 = invert tilt (laser shoots high instead of following target down)
 
 # ---------------------------------------------------------------------------
 # 3. HUMAN BIOMETRICS (Constants for Depth Estimation)
@@ -77,11 +89,19 @@ serial:
 # 6. VISION PIPELINE TUNING
 # ---------------------------------------------------------------------------
 vision:
+  # When true, skip the HOG cascade and run YOLO on EVERY frame.
+  # Recommended for: close-range / seated targets, or GPUs that can
+  # sustain 30+ FPS with YOLO (e.g. RTX 4060 runs YOLO at ~66 FPS).
+  # When false, the lightweight HOG+SVM gate runs first and only wakes
+  # YOLO after detecting a full-body pedestrian for several frames.
+  bypass_hog_gate: true
+
   # HOG+SVM cascade: minimum consecutive detections before waking YOLO
   hog_min_consecutive: 3
 
   # HOG+SVM cascade: detection confidence threshold for detectMultiScale
-  hog_hit_threshold: 0.3
+  # 0.0 = OpenCV default. Higher = fewer false positives but more misses.
+  hog_hit_threshold: 0.0
 
   # YOLO confidence threshold for person detection
   yolo_confidence: 0.45

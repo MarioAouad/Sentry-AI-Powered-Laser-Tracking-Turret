@@ -154,7 +154,7 @@ def create_app(
                         frame_bytes +
                         b"\r\n"
                     )
-                await asyncio.sleep(0.033)  # ~30 FPS cap for the stream
+                await asyncio.sleep(0.016)  # ~60 FPS cap — actual rate is limited by vision loop
 
         return StreamingResponse(
             frame_generator(),

@@ -99,7 +99,6 @@ class SentryOrchestrator:
         self._logger = logging.getLogger("sentry.orchestrator")
 
         # ── State ────────────────────────────────────────────────────
-        self._state = TurretState.SCANNING
         self._running = True
         self._fps: float = 0.0
         self._confidence: float = 0.0
@@ -116,10 +115,19 @@ class SentryOrchestrator:
 
         # ── Vision: HOG Cascade ──────────────────────────────────────
         vis_cfg = config["vision"]
-        self._cascade = CascadeDetector(
-            min_consecutive=vis_cfg["hog_min_consecutive"],
-            hit_threshold=vis_cfg["hog_hit_threshold"],
-        )
+        self._bypass_hog = vis_cfg.get("bypass_hog_gate", False)
+
+        # If bypassing HOG, start directly in TARGET_DETECTED so YOLO runs
+        if self._bypass_hog:
+            self._state = TurretState.TARGET_DETECTED
+            self._cascade = None  # Not needed
+            self._logger.info("HOG gate BYPASSED — YOLO runs on every frame")
+        else:
+            self._state = TurretState.SCANNING
+            self._cascade = CascadeDetector(
+                min_consecutive=vis_cfg["hog_min_consecutive"],
+                hit_threshold=vis_cfg["hog_hit_threshold"],
+            )
 
         # ── Vision: YOLO + ByteTrack ─────────────────────────────────
         model_path = MODELS_DIR / "yolo11m-pose.pt"
@@ -154,11 +162,15 @@ class SentryOrchestrator:
             offset_x_cm=off_cfg["x"],
             offset_y_cm=off_cfg["y"],
             offset_z_cm=off_cfg["z"],
-            affine_matrix_path=CONFIG_DIR / "dynamic_matrix.json",
         )
 
         # ── Kinematics: Inverse Kinematics ───────────────────────────
-        self._ik = InverseKinematics()
+        dir_cfg = config.get("servo_direction", {})
+        self._ik = InverseKinematics(
+            affine_matrix_path=CONFIG_DIR / "dynamic_matrix.json",
+            pan_direction=dir_cfg.get("pan", 1),
+            tilt_direction=dir_cfg.get("tilt", 1),
+        )
 
         # ── Comms: Serial Tether ─────────────────────────────────────
         ser_cfg = config["serial"]
@@ -232,31 +244,95 @@ class SentryOrchestrator:
             "logs": list(self._logs),
         }
 
-    # ── Frame Annotation ─────────────────────────────────────────────
-    def _annotate_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Draw the HUD overlay on the frame for the MJPEG stream."""
+    # ── COCO Skeleton Connections ──────────────────────────────────────
+    # Pairs of keypoint indices to draw as bones
+    _SKELETON = [
+        (0, 1), (0, 2), (1, 3), (2, 4),          # Face
+        (5, 6),                                     # Shoulders
+        (5, 7), (7, 9), (6, 8), (8, 10),           # Arms
+        (5, 11), (6, 12), (11, 12),                # Torso
+        (11, 13), (13, 15), (12, 14), (14, 16),    # Legs
+    ]
+
+    def _draw_skeleton(self, frame: np.ndarray, keypoints: np.ndarray) -> None:
+        """Draw the 17-point COCO skeleton on the frame."""
+        kp_color = (0, 255, 255)    # Yellow dots
+        bone_color = (0, 200, 200)  # Yellow-ish bones
+        target_kp_color = (0, 0, 255)  # Red for target keypoints
+
+        # Draw bones (lines between connected keypoints)
+        for i, j in self._SKELETON:
+            if keypoints[i][2] > 0.3 and keypoints[j][2] > 0.3:
+                pt1 = (int(keypoints[i][0]), int(keypoints[i][1]))
+                pt2 = (int(keypoints[j][0]), int(keypoints[j][1]))
+                cv2.line(frame, pt1, pt2, bone_color, 2)
+
+        # Draw keypoint dots
+        for idx, (x, y, conf) in enumerate(keypoints):
+            if conf > 0.3:
+                cv2.circle(frame, (int(x), int(y)), 4, kp_color, -1)
+
+    def _annotate_frame(
+        self,
+        frame: np.ndarray,
+        cascade_bbox: tuple[int, int, int, int] | None = None,
+        tracker_result=None,
+        target_xy: tuple[float, float] | None = None,
+        depth_cm: float = 0.0,
+    ) -> np.ndarray:
+        """Draw the full HUD overlay on the frame for the MJPEG stream."""
         h, w = frame.shape[:2]
         annotated = frame.copy()
 
-        # State badge
+        # ── State badge colors ───────────────────────────────────────
         color_map = {
-            TurretState.SCANNING: (248, 189, 56),        # Cyan-ish
+            TurretState.SCANNING: (248, 189, 56),        # Cyan
             TurretState.TARGET_DETECTED: (8, 171, 234),  # Yellow
             TurretState.TRACKING_LOCKED: (86, 197, 34),  # Green
             TurretState.REACQUIRING: (22, 115, 249),     # Orange
         }
         color = color_map.get(self._state, (255, 255, 255))
 
-        # Top-left state label
+        # ── HOG bounding box (SCANNING mode) ─────────────────────────
+        if cascade_bbox is not None:
+            bx, by, bw, bh = cascade_bbox
+            cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), (248, 189, 56), 2)
+            cv2.putText(annotated, "HOG", (bx, by - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (248, 189, 56), 1)
+
+        # ── YOLO bbox + skeleton + target (TRACKING mode) ────────────
+        if tracker_result is not None and tracker_result.detected:
+            x1, y1, x2, y2 = tracker_result.bbox
+
+            # Bounding box
+            cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)),
+                          (86, 197, 34), 2)
+            label = f"ID#{tracker_result.track_id}  {tracker_result.confidence:.0%}"
+            cv2.putText(annotated, label, (int(x1), int(y1) - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (86, 197, 34), 2)
+
+            # Skeleton
+            self._draw_skeleton(annotated, tracker_result.all_keypoints)
+
+            # Target crosshair (the body part the laser is aiming at)
+            if target_xy is not None:
+                tx, ty = int(target_xy[0]), int(target_xy[1])
+                cv2.drawMarker(annotated, (tx, ty), (0, 0, 255),
+                               cv2.MARKER_CROSS, 20, 2)
+                cv2.circle(annotated, (tx, ty), 12, (0, 0, 255), 2)
+
+            # Depth label
+            if depth_cm > 0:
+                cv2.putText(annotated, f"Z={depth_cm:.0f}cm", (int(x1), int(y2) + 18),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
+        # ── HUD text overlay ─────────────────────────────────────────
         cv2.putText(annotated, f"STATE: {self._state}", (10, 25),
                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        # FPS
         cv2.putText(annotated, f"FPS: {int(self._fps)}", (10, 50),
                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        # Servo angles
         cv2.putText(annotated, f"PAN: {self._pan}  TILT: {self._tilt}", (10, 75),
                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        # Target mode
         cv2.putText(annotated, f"TARGET: {self._shared.target_mode.upper()}", (10, 100),
                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
@@ -287,6 +363,7 @@ class SentryOrchestrator:
         cap = cv2.VideoCapture(self._cam_index)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._frame_w)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._frame_h)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize capture latency
 
         if not cap.isOpened():
             self._log("FATAL: Cannot open webcam at index %d" % self._cam_index)
@@ -294,9 +371,18 @@ class SentryOrchestrator:
             return
 
         self._log("Webcam opened — resolution %dx%d" % (self._frame_w, self._frame_h))
-        self._log("Entering SCANNING state (HOG+SVM active)")
+        if self._bypass_hog:
+            self._log("HOG bypassed — YOLO active immediately")
+        else:
+            self._log("Entering SCANNING state (HOG+SVM active)")
 
         frame_times: deque[float] = deque(maxlen=30)
+
+        # Per-frame annotation data
+        cascade_bbox = None
+        tracker_result_viz = None
+        target_xy = None
+        depth_cm = 0.0
 
         try:
             while self._running:
@@ -307,16 +393,23 @@ class SentryOrchestrator:
                     await asyncio.sleep(0.01)
                     continue
 
+                # Reset per-frame viz data
+                cascade_bbox = None
+                tracker_result_viz = None
+                target_xy = None
+
                 # ── State Machine ────────────────────────────────────
-                if self._state == TurretState.SCANNING:
+                if self._state == TurretState.SCANNING and not self._bypass_hog:
                     # Level 1: HOG+SVM lightweight scan
                     cascade_result = self._cascade.detect(frame)
+
+                    # Store bbox for visualization even before gate opens
+                    cascade_bbox = cascade_result.bbox
 
                     if cascade_result.detected:
                         self._state = TurretState.TARGET_DETECTED
                         self._cascade.reset()
                         self._log("HOG cascade triggered — waking YOLO")
-                        # Send SCANNING state to ESP32
                         self._serial.send_command(self._pan, self._tilt, STATE_SCANNING)
 
                 elif self._state in (
@@ -326,6 +419,7 @@ class SentryOrchestrator:
                 ):
                     # Level 2: YOLO11m-Pose + ByteTrack
                     tracker_result = self._tracker.track(frame)
+                    tracker_result_viz = tracker_result  # Store for annotation
 
                     if tracker_result.detected:
                         self._confidence = tracker_result.confidence
@@ -342,15 +436,16 @@ class SentryOrchestrator:
                             tracker_result.target_px[0],
                             tracker_result.target_px[1],
                         )
+                        target_xy = (filtered.x, filtered.y)
 
                         # Stage 2: Depth estimation
-                        z_cm = self._depth.estimate(
+                        depth_cm = self._depth.estimate(
                             tracker_result.left_shoulder_px,
                             tracker_result.right_shoulder_px,
                         )
 
                         # Stage 3: Spatial calibration
-                        spatial = self._spatial.transform(filtered.x, filtered.y, z_cm)
+                        spatial = self._spatial.transform(filtered.x, filtered.y, depth_cm)
 
                         # Stage 4: Inverse kinematics
                         servo = self._ik.compute(spatial.x, spatial.y, spatial.z)
@@ -359,13 +454,6 @@ class SentryOrchestrator:
 
                         # Stage 5: Serial command
                         self._serial.send_command(servo.pan, servo.tilt, STATE_LOCKED)
-
-                        # Draw target circle on the annotated frame
-                        cv2.circle(
-                            frame,
-                            (int(filtered.x), int(filtered.y)),
-                            10, (0, 0, 255), 2,
-                        )
 
                     else:
                         # No detection this frame — check timeout
@@ -377,12 +465,17 @@ class SentryOrchestrator:
                             self._log("Track LOST — reacquiring...")
 
                         if self._track_lost_timer >= self._track_lost_timeout:
-                            # Timeout: fall back to HOG scanning
-                            self._state = TurretState.SCANNING
+                            # Timeout: fall back
                             self._filter.reset()
                             self._track_lost_timer = 0.0
                             self._serial.send_command(90, 90, STATE_SCANNING)
-                            self._log("Reacquisition timeout — returning to SCANNING")
+                            if self._bypass_hog:
+                                # Stay in TARGET_DETECTED so YOLO keeps running
+                                self._state = TurretState.TARGET_DETECTED
+                                self._log("Reacquisition timeout — continuing YOLO scan")
+                            else:
+                                self._state = TurretState.SCANNING
+                                self._log("Reacquisition timeout — returning to HOG scanning")
 
                 # ── FPS Calculation ───────────────────────────────────
                 t_end = time.perf_counter()
@@ -392,7 +485,13 @@ class SentryOrchestrator:
                     self._fps = 1.0 / avg_time if avg_time > 0 else 0.0
 
                 # ── Annotate & publish MJPEG frame ────────────────────
-                annotated = self._annotate_frame(frame)
+                annotated = self._annotate_frame(
+                    frame,
+                    cascade_bbox=cascade_bbox,
+                    tracker_result=tracker_result_viz,
+                    target_xy=target_xy,
+                    depth_cm=depth_cm,
+                )
                 _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 70])
                 self._shared.latest_frame_jpeg = jpeg_buf.tobytes()
 

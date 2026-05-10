@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import sys
 import time
 from pathlib import Path
@@ -51,12 +52,15 @@ logging.basicConfig(
 logger = logging.getLogger("sentry.calibration")
 
 # ── Calibration Points ───────────────────────────────────────────────
-# Three servo angle pairs that spread across the turret's workspace.
+# Three servo angle pairs that stay WITHIN the camera's FOV.
+# Camera V-FOV is only ~46° (half=23°). The user confirmed that
+# tilt=80 (10° from center) already shoots above the camera view,
+# so we use very tight angles: ±10° pan, ±5° tilt.
 # Format: (pan_degrees, tilt_degrees)
 CALIBRATION_ANGLES: list[tuple[int, int]] = [
-    (60, 60),    # Upper-left region
-    (120, 60),   # Upper-right region
-    (90, 110),   # Center-bottom region
+    (80, 87),    # Left, slightly above center
+    (100, 87),   # Right, slightly above center
+    (90, 95),    # Center, slightly below center
 ]
 
 
@@ -183,7 +187,47 @@ def run_calibration() -> None:
     logger.info("")
     logger.info("── Computing Affine Transform ──────────────")
 
-    src_pts = np.float32(pixel_points)
+    # We need to map mathematically PREDICTED angles to REAL physical angles
+    predicted_angles: list[tuple[float, float]] = []
+
+    # Reconstruct the math pipeline (must match inverse_kinematics.py)
+    cx = cam_cfg["frame_width"] / 2.0
+    cy = cam_cfg["frame_height"] / 2.0
+    fov_h_rad = math.radians(cam_cfg["fov_h_deg"])
+    focal = (cam_cfg["frame_width"] / 2.0) / math.tan(fov_h_rad / 2.0)
+
+    # Servo direction flags (must match hardware_offsets.yaml)
+    dir_cfg = config.get("servo_direction", {})
+    pan_dir = dir_cfg.get("pan", 1)
+    tilt_dir = dir_cfg.get("tilt", 1)
+
+    # We don't know the distance to the wall during calibration,
+    # so we assume a nominal depth of 150cm.
+    z_cm = 150.0
+
+    for px, py in pixel_points:
+        # 1. Pixel -> Camera Space
+        rel_px = px - cx
+        rel_py = py - cy
+
+        cam_x = (rel_px / focal) * z_cm
+        cam_y = (rel_py / focal) * z_cm
+
+        # 2. Camera -> Turret Offset
+        turret_x = float(cam_x - config["turret_offset_cm"]["x"])
+        turret_y = float(cam_y - config["turret_offset_cm"]["y"])
+        turret_z = float(z_cm - config["turret_offset_cm"]["z"])
+
+        # 3. Inverse Kinematics Prediction (with direction flags)
+        theta_pan = math.atan2(turret_x, turret_z)
+        horizontal_dist = math.sqrt(turret_x * turret_x + turret_z * turret_z)
+        theta_tilt = math.atan2(turret_y, horizontal_dist)
+
+        pred_pan = 90.0 + pan_dir * math.degrees(theta_pan)
+        pred_tilt = 90.0 + tilt_dir * math.degrees(theta_tilt)
+        predicted_angles.append((pred_pan, pred_tilt))
+
+    src_pts = np.float32(predicted_angles)
     dst_pts = np.float32(angle_points)
 
     # cv2.getAffineTransform requires exactly 3 point pairs → 2×3 matrix
@@ -200,6 +244,7 @@ def run_calibration() -> None:
         "affine_matrix": affine_matrix.tolist(),
         "calibration_points": {
             "pixel_coords": [list(p) for p in pixel_points],
+            "predicted_angles": [list(p) for p in predicted_angles],
             "servo_angles": [list(a) for a in angle_points],
         },
     }

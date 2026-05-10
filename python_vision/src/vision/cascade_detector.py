@@ -79,15 +79,18 @@ class CascadeDetector:
         after ``min_consecutive`` successive frames with at least one
         pedestrian detection.
         """
-        # Resize for consistent detection speed (HOG is scale-sensitive)
-        small = cv2.resize(frame, (640, 480))
+        # Downscale for speed — HOG is just a wake-up gate, not a tracker
+        h, w = frame.shape[:2]
+        small = cv2.resize(frame, (320, int(h * 320 / w)))
 
         # Run the multi-scale sliding-window detector
+        # scale=1.3 and winStride=16 are much faster than the defaults
+        # while still reliable enough for a binary "person present?" gate
         rects, weights = self._hog.detectMultiScale(
             small,
-            winStride=(8, 8),
+            winStride=(16, 16),
             padding=(4, 4),
-            scale=1.05,
+            scale=1.3,
             hitThreshold=self._hit_threshold,
         )
 
@@ -100,8 +103,9 @@ class CascadeDetector:
             x, y, w, h = rects[best_idx]
 
             # Scale bbox back to original frame coordinates
-            scale_x = frame.shape[1] / 640
-            scale_y = frame.shape[0] / 480
+            small_h, small_w = small.shape[:2]
+            scale_x = frame.shape[1] / small_w
+            scale_y = frame.shape[0] / small_h
             bbox = (
                 int(x * scale_x),
                 int(y * scale_y),
