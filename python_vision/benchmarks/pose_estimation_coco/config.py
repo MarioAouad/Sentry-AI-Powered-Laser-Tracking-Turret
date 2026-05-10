@@ -3,15 +3,24 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# 1. Get the exact folder where this config.py file lives
+CURRENT_DIR = Path(__file__).resolve().parent
 
-# Edit these values during analysis instead of changing benchmark_vision_coco.py.
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 2. Climb up two folders to hit the 'python_vision' root directory
+# CURRENT_DIR = pose_estimation_coco
+# .parent = benchmarks
+# .parent.parent = python_vision
+PYTHON_VISION_ROOT = CURRENT_DIR.parent.parent
 
-DEFAULT_IMAGES_DIR = Path(os.path.join(SCRIPT_DIR, "images"))
-DEFAULT_ANNOTATIONS = Path(os.path.join(SCRIPT_DIR, "person_keypoints_val2017.json"))
-DEFAULT_OUTPUT_DIR = Path(os.path.join(SCRIPT_DIR, "output"))
+# 3. Point to the universal models folder
+DEFAULT_MODELS_DIR = PYTHON_VISION_ROOT / "models"
 
-DEFAULT_IMAGE_LIMIT = 200
+# Keep your existing local paths for images and output
+DEFAULT_IMAGES_DIR = CURRENT_DIR / "images"
+DEFAULT_ANNOTATIONS = CURRENT_DIR / "person_keypoints_val2017.json"
+DEFAULT_OUTPUT_DIR = CURRENT_DIR / "output"
+
+DEFAULT_IMAGE_LIMIT = None
 DEFAULT_YOLO_MODEL = "all"
 DEFAULT_DEVICE = "auto"
 DEFAULT_CONF_THRESHOLD = 0.25
@@ -19,12 +28,12 @@ DEFAULT_OKS_THRESHOLD = 0.50
 DEFAULT_PCK_THRESHOLD = 0.20
 
 YOLO_POSE_MODELS = {
-    "yolov8n": "yolov8n-pose.pt",
-    "yolov8s": "yolov8s-pose.pt",
-    "yolov8m": "yolov8m-pose.pt",
-    "yolo11n": "yolo11n-pose.pt",
-    "yolo11s": "yolo11s-pose.pt",
-    "yolo11m": "yolo11m-pose.pt",
+    "yolov8n": str(DEFAULT_MODELS_DIR / "yolov8n-pose.pt"),
+    "yolov8s": str(DEFAULT_MODELS_DIR / "yolov8s-pose.pt"),
+    "yolov8m": str(DEFAULT_MODELS_DIR / "yolov8m-pose.pt"),
+    "yolo11n": str(DEFAULT_MODELS_DIR / "yolo11n-pose.pt"),
+    "yolo11s": str(DEFAULT_MODELS_DIR / "yolo11s-pose.pt"),
+    "yolo11m": str(DEFAULT_MODELS_DIR / "yolo11m-pose.pt"),
 }
 
 # COCO keypoint OKS sigmas. OKS is like IoU for skeletons: it rewards keypoints

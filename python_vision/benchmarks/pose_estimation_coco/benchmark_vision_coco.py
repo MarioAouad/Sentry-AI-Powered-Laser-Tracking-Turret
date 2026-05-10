@@ -417,7 +417,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_dir = ensure_output_dir(args.output)
+    
+    # Create a unique run folder inside the specified output directory
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = ensure_output_dir(args.output / f"run_{timestamp}")
+    
     if not args.images.exists():
         raise SystemExit(f"COCO images folder not found: {args.images}")
     if not args.annotations.exists():

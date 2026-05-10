@@ -1,31 +1,85 @@
-# Ignore Python bytecode files
+# ==========================================
+# 1. PYTHON & VIRTUAL ENVIRONMENTS
+# ==========================================
+# Compiled Python bytecode (automatically generated during execution, no need to track)
 __pycache__/
 *.py[cod]
+*.$py.class
 
-# Ignore virtual environment
+# Virtual environments (where isolated dependencies are installed locally)
 venv/
 .venv/
 env/
 
-# Ignore IDE configuration files
+# Conda environment folders (if managed inside the project directory)
+.conda/
+
+# ==========================================
+# 2. MACHINE LEARNING, DATA & NOTEBOOKS
+# ==========================================
+# Jupyter Notebook auto-saves and state checkpoints
+.ipynb_checkpoints/
+*.ipynb
+
+# Model weights and serialized files (these are typically too large for Git)
+*.pth
+*.pt
+*.tflite
+*.h5
+
+# YOLO or other training run caches and evaluation logs
+runs/
+*.cache
+
+# ==========================================
+# 3. PROJECT-SPECIFIC: DATASETS & MEDIA
+# ==========================================
+# Ignore large video files used for testing/inference
+*.mp4
+
+# Ignore extracted frames, but track the empty directory structure using .gitkeep
+extract_frames/dataset_frames/*
+!extract_frames/dataset_frames/.gitkeep
+
+# Ignore custom dataset images and labels, but track the empty folders
+benchmarks/custom_datasets/images/*
+!benchmarks/custom_datasets/images/.gitkeep
+benchmarks/custom_datasets/labels/*
+!benchmarks/custom_datasets/labels/.gitkeep
+
+# Ignore raw pose estimation data and large JSON annotations
+benchmarks/pose_estimation_coco/images/*
+!benchmarks/pose_estimation_coco/images/.gitkeep
+benchmarks/pose_estimation_coco/person_keypoints_val2017.json
+
+# Ignore pose estimation benchmark outputs
+benchmarks/pose_estimation_coco/output/*
+!benchmarks/pose_estimation_coco/output/.gitkeep
+
+# ==========================================
+# 4. IDEs, TOOLS & CONFIGURATION
+# ==========================================
+# VS Code, Cursor AI, and JetBrains local workspace settings
 .vscode/
+.cursor/
 .idea/
+
+# Vim/Emacs temporary swap files (created when a file is open or crashes)
 *.swp
 *.swo
 
-# Ignore Jupyter notebooks
-*.ipynb
+# Environment variables (NEVER commit API keys, passwords, or local secrets!)
+.env
 
-# Ignore temporary files
-*.tmp
-*.log
-
-# Ignore OS-specific files
+# ==========================================
+# 5. OS-SPECIFIC & TEMPORARY FILES
+# ==========================================
+# macOS custom folder attributes and metadata
 .DS_Store
+
+# Windows image thumbnail caches
 Thumbs.db
 
-# Ignore dataset and model files (large files)
-Dataset.mp4
-dataset_frames/
-trained_model.pth
-trained_model.tflite
+# Generic temporary files and application logs
+*.tmp
+*.log
