@@ -3,7 +3,6 @@ import LiveFeed from "../components/LiveFeed";
 import StatusCards from "../components/StatusCards";
 import ControlPanel from "../components/ControlPanel";
 import ServoPanel from "../components/ServoPanel";
-import VirtualLaser from "../components/VirtualLaser";
 import { useSystemState } from "../hooks/useSystemstate";
 
 export default function Dashboard() {
@@ -114,7 +113,6 @@ export default function Dashboard() {
             connected={connected}
           />
           <StatusCards systemState={systemState} isMobile={isMobile} />
-          <VirtualLaser systemState={systemState} />
           <ServoPanel systemState={systemState} />
         </div>
       </div>
@@ -192,7 +190,7 @@ const styles = {
   rightColumn: {
     display: "grid",
     gap: "18px",
-    gridTemplateRows: "minmax(420px, 1fr) auto auto auto",
+    gridTemplateRows: "minmax(500px, 1fr) auto auto",
     minHeight: 0,
   },
 };

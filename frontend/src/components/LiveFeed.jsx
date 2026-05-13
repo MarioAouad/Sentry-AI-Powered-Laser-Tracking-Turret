@@ -36,8 +36,8 @@ export default function LiveFeed({ systemState, isMobile, apiBase, connected }) 
       <div
         style={{
           ...feed,
-          height: isMobile ? "300px" : "100%",
-          minHeight: isMobile ? "300px" : "420px",
+          height: isMobile ? "340px" : "100%",
+          minHeight: isMobile ? "340px" : "500px",
         }}
       >
         {connected && !streamError ? (

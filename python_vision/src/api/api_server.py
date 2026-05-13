@@ -7,7 +7,7 @@ to the React Vite frontend dashboard.
 Endpoints:
     GET  /health           → Health check
     GET  /video-feed       → MJPEG live camera stream
-    POST /target-mode      → Change targeting body part (head/chest/hand)
+    POST /target-mode      → Change targeting body part (head/chest)
     POST /system-control   → Start / Stop / Calibrate the system
     WS   /ws/telemetry     → Real-time telemetry broadcast
 
@@ -47,7 +47,7 @@ logger = logging.getLogger("sentry.api.server")
 
 # ── Request Models ───────────────────────────────────────────────────
 class TargetModeRequest(BaseModel):
-    mode: str  # "head", "chest", or "hand"
+    mode: str  # "head" or "chest"
 
 
 class SystemControlRequest(BaseModel):
@@ -113,9 +113,9 @@ def create_app(
     # ── Target Mode ──────────────────────────────────────────────────
     @app.post("/target-mode")
     async def set_target_mode(req: TargetModeRequest) -> JSONResponse:
-        if req.mode not in ("head", "chest", "hand"):
+        if req.mode not in ("head", "chest"):
             return JSONResponse(
-                {"error": f"Invalid mode '{req.mode}'. Use head, chest, or hand."},
+                {"error": f"Invalid mode '{req.mode}'. Use head or chest."},
                 status_code=400,
             )
         shared_state.target_mode = req.mode
@@ -129,9 +129,9 @@ def create_app(
     #   http://localhost:8000/target/chest
     @app.get("/target/{mode}")
     async def quick_target(mode: str) -> JSONResponse:
-        if mode not in ("head", "chest", "hand"):
+        if mode not in ("head", "chest"):
             return JSONResponse(
-                {"error": f"Invalid mode '{mode}'. Use head, chest, or hand."},
+                {"error": f"Invalid mode '{mode}'. Use head or chest."},
                 status_code=400,
             )
         shared_state.target_mode = mode
