@@ -1,23 +1,13 @@
 """
-depth_estimator.py — Pseudo-Depth Z-Axis Estimation
-====================================================
-Standard webcams provide no native depth information.  To position the
-target in 3-D space, this module exploits the pinhole camera model and
-the physiologically constant human bi-acromial (shoulder-to-shoulder)
-width.
+depth_estimator.py — Hybrid Depth Estimation
+==============================================
+Estimates depth using two methods and picks the most reliable:
 
-The inverse relationship between the pixel width of the shoulders and
-the physical distance yields:
+1. **Shoulder Width** (primary): Uses bi-acromial distance — stable
+   across postures. Z = (W_real × f) / W_pixel
 
-    Z = (REAL_SHOULDER_WIDTH_CM × FOCAL_LENGTH_PX) / pixel_shoulder_width
-
-Focal length in pixels is derived from the horizontal field-of-view:
-
-    focal_px = (frame_width / 2) / tan(fov_h / 2)
-
-Because the shoulder width remains constant regardless of the subject's
-posture (unlike the volatile full-body bounding-box height), this method
-is highly stable even when the subject crouches, bends, or raises arms.
+2. **Bounding Box Height** (fallback): Uses full YOLO bbox height with
+   an assumed visible-body proportion. Less accurate but always available.
 """
 
 from __future__ import annotations
@@ -27,24 +17,24 @@ import math
 
 logger = logging.getLogger("sentry.kinematics.depth")
 
+# Average visible body height (head-to-hip) in cm — used for bbox fallback
+_VISIBLE_BODY_HEIGHT_CM = 85.0
+
 
 class DepthEstimator:
     """
-    Monocular pseudo-depth estimator based on shoulder pixel width.
+    Hybrid monocular depth estimator.
 
     Parameters
     ----------
     shoulder_width_cm : float
-        Average adult bi-acromial width in centimetres.
-    focal_length_px : float
-        Camera focal length in pixels.  If not provided, it is computed
-        from ``fov_h_deg`` and ``frame_width``.
+        Average adult bi-acromial width (cm).
     fov_h_deg : float
-        Horizontal field-of-view of the camera in degrees.
+        Horizontal FOV of the camera (degrees).
     frame_width : int
-        Width of the captured frame in pixels.
+        Width of the captured frame (pixels).
     default_depth_cm : float
-        Fallback depth (cm) when shoulders are not visible.
+        Fallback depth when no estimation is possible.
     """
 
     def __init__(
@@ -53,7 +43,7 @@ class DepthEstimator:
         focal_length_px: float | None = None,
         fov_h_deg: float = 62.0,
         frame_width: int = 640,
-        default_depth_cm: float = 150.0,
+        default_depth_cm: float = 200.0,
     ) -> None:
         self._shoulder_width_cm = shoulder_width_cm
         self._default_depth_cm = default_depth_cm
@@ -61,69 +51,68 @@ class DepthEstimator:
         if focal_length_px is not None:
             self._focal_px = focal_length_px
         else:
-            # Derive from horizontal FOV:  f = (w/2) / tan(θ/2)
             half_fov_rad = math.radians(fov_h_deg / 2.0)
             self._focal_px = (frame_width / 2.0) / math.tan(half_fov_rad)
 
+        # Last estimated depth (for HUD display)
+        self.last_shoulder_px: float = 0.0
+        self.last_method: str = "default"
+
         logger.info(
-            "[DepthEstimator] Initialised — shoulder=%.1f cm, focal=%.1f px, default_Z=%.1f cm",
-            self._shoulder_width_cm,
-            self._focal_px,
-            self._default_depth_cm,
+            "[DepthEstimator] shoulder=%.1f cm, focal=%.1f px, default=%.1f cm",
+            self._shoulder_width_cm, self._focal_px, self._default_depth_cm,
         )
 
     @property
     def focal_length_px(self) -> float:
-        """Focal length in pixels (read-only)."""
         return self._focal_px
 
     def estimate(
         self,
         left_shoulder_px: tuple[float, float] | None,
         right_shoulder_px: tuple[float, float] | None,
+        bbox: tuple[float, float, float, float] | None = None,
     ) -> float:
         """
-        Compute pseudo-depth Z in centimetres.
+        Estimate depth using shoulders (primary) or bbox (fallback).
 
         Parameters
         ----------
-        left_shoulder_px : tuple | None
-            (x, y) pixel coordinate of the left shoulder keypoint.
-        right_shoulder_px : tuple | None
-            (x, y) pixel coordinate of the right shoulder keypoint.
+        left_shoulder_px, right_shoulder_px : tuple | None
+            Shoulder keypoint pixel coordinates.
+        bbox : tuple | None
+            (x1, y1, x2, y2) YOLO bounding box for bbox-height fallback.
 
         Returns
         -------
         float
-            Estimated depth Z in centimetres.  Returns the default
-            fallback if either shoulder is not visible.
+            Estimated depth in centimetres.
         """
-        if left_shoulder_px is None or right_shoulder_px is None:
-            logger.debug(
-                "[DepthEstimator] Shoulder(s) not visible — using default Z=%.1f cm",
-                self._default_depth_cm,
-            )
-            return self._default_depth_cm
+        # ── Method 1: Shoulder Width (most accurate) ─────────────────
+        if left_shoulder_px is not None and right_shoulder_px is not None:
+            dx = left_shoulder_px[0] - right_shoulder_px[0]
+            dy = left_shoulder_px[1] - right_shoulder_px[1]
+            pixel_width = math.sqrt(dx * dx + dy * dy)
 
-        # Euclidean pixel distance between the two shoulders
-        dx = left_shoulder_px[0] - right_shoulder_px[0]
-        dy = left_shoulder_px[1] - right_shoulder_px[1]
-        pixel_width = math.sqrt(dx * dx + dy * dy)
+            if pixel_width > 10.0:  # Need reasonable pixel span
+                z_cm = (self._shoulder_width_cm * self._focal_px) / pixel_width
+                z_cm = max(50.0, min(z_cm, 800.0))
+                self.last_shoulder_px = pixel_width
+                self.last_method = "shoulder"
+                return z_cm
 
-        if pixel_width < 1.0:
-            # Shoulders overlapping — unreliable, fall back
-            logger.debug("[DepthEstimator] Pixel width < 1 — using default Z")
-            return self._default_depth_cm
+        # ── Method 2: Bounding Box Height (fallback) ─────────────────
+        if bbox is not None:
+            _, y1, _, y2 = bbox
+            bbox_height = abs(y2 - y1)
+            if bbox_height > 20.0:
+                z_cm = (_VISIBLE_BODY_HEIGHT_CM * self._focal_px) / bbox_height
+                z_cm = max(50.0, min(z_cm, 800.0))
+                self.last_shoulder_px = 0.0
+                self.last_method = "bbox"
+                return z_cm
 
-        # Pinhole camera model: Z = (W_real * f) / W_pixel
-        z_cm = (self._shoulder_width_cm * self._focal_px) / pixel_width
-
-        # Sanity clamp: prevent absurd values (too close or too far)
-        z_cm = max(30.0, min(z_cm, 1000.0))
-
-        logger.debug(
-            "[DepthEstimator] shoulder_px=%.1f → Z=%.1f cm",
-            pixel_width,
-            z_cm,
-        )
-        return z_cm
+        # ── Fallback ─────────────────────────────────────────────────
+        self.last_shoulder_px = 0.0
+        self.last_method = "default"
+        return self._default_depth_cm

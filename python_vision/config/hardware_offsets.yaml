@@ -44,8 +44,16 @@ turret_offset_cm:
 # Your test script proved: pan 90 = center. These flags fix which
 # direction pan > 90 and tilt > 90 physically move the laser.
 servo_direction:
-  pan:  -1   # -1 = invert pan (you reported: go left → turret goes right)
-  tilt: -1   # -1 = invert tilt (laser shoots high instead of following target down)
+  pan: -1   # pan=80 moves laser LEFT from user's perspective = camera's RIGHT
+  tilt: -1    # MUST be +1: turret is BELOW camera → target_y negative → atan2 negative → +1 gives tilt<90 → aims UP ✓
+
+# Fine-tune servo aim after all math is done.
+# Positive pan_trim shifts the laser to the RIGHT (camera perspective).
+# Positive tilt_trim shifts the laser DOWNWARD.
+# Adjust these by ±1 until the laser hits the red crosshair exactly.
+servo_trim:
+  pan:  8    # Compensate for systematic leftward pan drift (was 5, increased)
+  tilt: 0
 
 # ---------------------------------------------------------------------------
 # 3. HUMAN BIOMETRICS (Constants for Depth Estimation)
@@ -62,12 +70,11 @@ biometrics:
 filters:
   # Exponential Moving Average smoothing factor (0 < α ≤ 1)
   # Lower α = more smoothing (slower response), Higher α = less smoothing (faster)
-  # Recommended: 0.25–0.40 for turret servo stability
-  ema_alpha: 0.35
+  ema_alpha: 0.65
 
   # Rolling median window size (odd number, applied BEFORE the EMA)
   # Rejects single-frame AI bounding-box glitches
-  median_window: 5
+  median_window: 3
 
 # ---------------------------------------------------------------------------
 # 5. SERIAL COMMUNICATION

@@ -104,17 +104,21 @@ def run_calibration() -> None:
         sys.exit(1)
     serial.start()
 
-    # Open the webcam
+    # Open the webcam at high resolution for better calibration accuracy
     cap = cv2.VideoCapture(cam_cfg["device_index"])
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_cfg["frame_width"])
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_cfg["frame_height"])
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
     if not cap.isOpened():
         logger.error("Cannot open webcam — aborting calibration")
         serial.stop()
         sys.exit(1)
 
-    logger.info("Webcam opened — resolution %dx%d", cam_cfg["frame_width"], cam_cfg["frame_height"])
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    logger.info("Webcam opened — resolution %dx%d", actual_w, actual_h)
+    logger.info("Point laser at a wall 2-3 meters away for best results.")
 
     # Collect pixel positions for each calibration angle
     pixel_points: list[tuple[int, int]] = []

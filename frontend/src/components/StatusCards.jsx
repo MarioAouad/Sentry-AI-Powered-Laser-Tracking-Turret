@@ -1,10 +1,33 @@
 export default function StatusCards({ systemState, isMobile }) {
   const items = [
-    { label: "FPS", value: systemState.fps },
-    { label: "Confidence", value: systemState.confidence },
-    { label: "Tracker", value: systemState.tracker },
-    { label: "Model", value: systemState.model },
-    { label: "State", value: systemState.systemState },
+    {
+      label: "FPS",
+      value: systemState.fps,
+      accent: "#a5f3fc",
+    },
+    {
+      label: "Confidence",
+      value:
+        typeof systemState.confidence === "number"
+          ? (systemState.confidence * 100).toFixed(0) + "%"
+          : systemState.confidence,
+      accent: systemState.confidence > 0.7 ? "#86efac" : "#fde68a",
+    },
+    {
+      label: "Tracker",
+      value: systemState.tracker,
+      accent: "#c4b5fd",
+    },
+    {
+      label: "Model",
+      value: systemState.model,
+      accent: "#c4b5fd",
+    },
+    {
+      label: "Target",
+      value: (systemState.targetMode || "chest").toUpperCase(),
+      accent: "#fca5a5",
+    },
   ];
 
   return (
@@ -14,13 +37,17 @@ export default function StatusCards({ systemState, isMobile }) {
       <div
         style={{
           ...grid,
-          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, minmax(0, 1fr))",
+          gridTemplateColumns: isMobile
+            ? "1fr 1fr"
+            : "repeat(5, minmax(0, 1fr))",
         }}
       >
         {items.map((item) => (
           <div key={item.label} style={miniCard}>
             <p style={label}>{item.label}</p>
-            <p style={value}>{item.value}</p>
+            <p style={{ ...value, color: item.accent || "#f8fafc" }}>
+              {item.value}
+            </p>
           </div>
         ))}
       </div>
@@ -57,7 +84,10 @@ const miniCard = {
 const label = {
   margin: 0,
   color: "#94a3b8",
-  fontSize: "12px",
+  fontSize: "11px",
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
+  fontWeight: "600",
 };
 
 const value = {
@@ -66,4 +96,5 @@ const value = {
   fontSize: "16px",
   fontWeight: "700",
   wordBreak: "break-word",
+  fontFamily: "'JetBrains Mono', 'Consolas', monospace",
 };

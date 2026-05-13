@@ -3,10 +3,12 @@ import LiveFeed from "../components/LiveFeed";
 import StatusCards from "../components/StatusCards";
 import ControlPanel from "../components/ControlPanel";
 import ServoPanel from "../components/ServoPanel";
+import VirtualLaser from "../components/VirtualLaser";
 import { useSystemState } from "../hooks/useSystemstate";
 
 export default function Dashboard() {
-  const { systemState } = useSystemState();
+  const { systemState, connected, setTargetMode, sendSystemCommand, apiBase } =
+    useSystemState();
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -46,29 +48,73 @@ export default function Dashboard() {
           >
             AI Sentry Turret Dashboard
           </h1>
-
         </div>
 
-        <div style={styles.headerBadge}>
-          <span style={styles.dot}></span>
-          {systemState.systemState}
+        <div style={styles.headerRight}>
+          {/* Connection indicator */}
+          <div
+            style={{
+              ...styles.connectionBadge,
+              borderColor: connected ? "#22c55e44" : "#ef444444",
+            }}
+          >
+            <span
+              style={{
+                ...styles.dot,
+                background: connected ? "#22c55e" : "#ef4444",
+                boxShadow: connected
+                  ? "0 0 8px #22c55e88"
+                  : "0 0 8px #ef444488",
+              }}
+            />
+            {connected ? "Live" : "Offline"}
+          </div>
+
+          <div style={styles.headerBadge}>
+            <span
+              style={{
+                ...styles.dot,
+                background:
+                  systemState.systemState === "Tracking Locked"
+                    ? "#22c55e"
+                    : systemState.systemState === "Reacquiring"
+                    ? "#f97316"
+                    : "#38bdf8",
+              }}
+            />
+            {systemState.systemState}
+          </div>
         </div>
       </header>
 
       <div
         style={{
           ...styles.mainGrid,
-          gridTemplateColumns: isTablet ? "1fr" : "minmax(340px, 0.85fr) minmax(520px, 1.35fr)",
+          gridTemplateColumns: isTablet
+            ? "1fr"
+            : "minmax(340px, 0.85fr) minmax(520px, 1.35fr)",
           gap: isMobile ? "14px" : "18px",
         }}
       >
         <div style={styles.leftColumn}>
-          <ControlPanel systemState={systemState} isMobile={isMobile} />
+          <ControlPanel
+            systemState={systemState}
+            isMobile={isMobile}
+            setTargetMode={setTargetMode}
+            sendSystemCommand={sendSystemCommand}
+            connected={connected}
+          />
         </div>
 
         <div style={styles.rightColumn}>
-          <LiveFeed systemState={systemState} isMobile={isMobile} />
+          <LiveFeed
+            systemState={systemState}
+            isMobile={isMobile}
+            apiBase={apiBase}
+            connected={connected}
+          />
           <StatusCards systemState={systemState} isMobile={isMobile} />
+          <VirtualLaser systemState={systemState} />
           <ServoPanel systemState={systemState} />
         </div>
       </div>
@@ -81,7 +127,7 @@ const styles = {
     minHeight: "100vh",
     background: "#020617",
     color: "#e2e8f0",
-    fontFamily: "Arial, sans-serif",
+    fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
     boxSizing: "border-box",
   },
   header: {
@@ -98,10 +144,22 @@ const styles = {
     fontWeight: "700",
     color: "#f8fafc",
   },
-  subtitle: {
-    margin: "6px 0 0 0",
-    color: "#94a3b8",
-    fontSize: "14px",
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  connectionBadge: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    background: "#111827",
+    border: "1px solid #334155",
+    padding: "8px 12px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: "700",
+    color: "#cbd5e1",
   },
   headerBadge: {
     display: "flex",
@@ -120,6 +178,7 @@ const styles = {
     height: "10px",
     borderRadius: "50%",
     background: "#22c55e",
+    flexShrink: 0,
   },
   mainGrid: {
     display: "grid",
@@ -133,7 +192,7 @@ const styles = {
   rightColumn: {
     display: "grid",
     gap: "18px",
-    gridTemplateRows: "minmax(420px, 1fr) auto auto",
+    gridTemplateRows: "minmax(420px, 1fr) auto auto auto",
     minHeight: 0,
   },
 };

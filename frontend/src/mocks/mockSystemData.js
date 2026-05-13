@@ -1,16 +1,14 @@
 export const mockSystemData = {
   systemState: "Scanning",
-  fps: 29,
-  confidence: 0.82,
+  fps: 0,
+  confidence: 0,
   tracker: "ByteTrack",
-  model: "YOLOv8-Pose",
+  model: "YOLO11m-Pose",
   yaw: 90,
-  pitch: 60,
+  pitch: 90,
   indicator: "Standby",
-  targetMode: "Chest",
+  targetMode: "chest",
   logs: [
-    "System initialized",
-    "Camera connected",
-    "Idle scan active",
+    "Waiting for backend connection...",
   ],
 };

@@ -124,6 +124,22 @@ def create_app(
         logger.info("[API] Target mode changed → %s", req.mode)
         return JSONResponse({"target_mode": req.mode})
 
+    # Quick-switch shortcuts — just visit in browser:
+    #   http://localhost:8000/target/head
+    #   http://localhost:8000/target/chest
+    @app.get("/target/{mode}")
+    async def quick_target(mode: str) -> JSONResponse:
+        if mode not in ("head", "chest", "hand"):
+            return JSONResponse(
+                {"error": f"Invalid mode '{mode}'. Use head, chest, or hand."},
+                status_code=400,
+            )
+        shared_state.target_mode = mode
+        if shared_state.on_target_mode_change:
+            shared_state.on_target_mode_change(mode)
+        logger.info("[API] Target mode quick-switched → %s", mode)
+        return JSONResponse({"target_mode": mode, "message": f"Now targeting {mode}"})
+
     # ── System Control ───────────────────────────────────────────────
     @app.post("/system-control")
     async def system_control(req: SystemControlRequest) -> JSONResponse:

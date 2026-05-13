@@ -107,6 +107,14 @@ class SentryOrchestrator:
         self._logs: deque[str] = deque(maxlen=10)
         self._track_lost_timer: float = 0.0
 
+        # Debug pipeline values (exposed in telemetry)
+        self._debug_raw_pan: int = 90
+        self._debug_raw_tilt: int = 90
+        self._debug_spatial: tuple = (0.0, 0.0, 0.0)
+        self._debug_depth: float = 0.0
+        self._debug_target_px: tuple = (0.0, 0.0)
+        self._debug_vlaser_px: tuple = (0.0, 0.0)  # Where laser hits on camera
+
         # ── Camera ───────────────────────────────────────────────────
         cam_cfg = config["camera"]
         self._cam_index = cam_cfg["device_index"]
@@ -166,11 +174,19 @@ class SentryOrchestrator:
 
         # ── Kinematics: Inverse Kinematics ───────────────────────────
         dir_cfg = config.get("servo_direction", {})
+        self._pan_dir = dir_cfg.get("pan", 1)
+        self._tilt_dir = dir_cfg.get("tilt", 1)
         self._ik = InverseKinematics(
-            affine_matrix_path=CONFIG_DIR / "dynamic_matrix.json",
-            pan_direction=dir_cfg.get("pan", 1),
-            tilt_direction=dir_cfg.get("tilt", 1),
+            pan_direction=self._pan_dir,
+            tilt_direction=self._tilt_dir,
         )
+
+        # ── Servo Trim (fine-tune bias) ──────────────────────────────
+        trim_cfg = config.get("servo_trim", {})
+        self._pan_trim = trim_cfg.get("pan", 0)
+        self._tilt_trim = trim_cfg.get("tilt", 0)
+        if self._pan_trim or self._tilt_trim:
+            self._logger.info("Servo trim: pan=%+d, tilt=%+d", self._pan_trim, self._tilt_trim)
 
         # ── Comms: Serial Tether ─────────────────────────────────────
         ser_cfg = config["serial"]
@@ -233,7 +249,7 @@ class SentryOrchestrator:
 
         return {
             "systemState": self._state,
-            "fps": int(round(self._fps)),
+            "fps": round(self._fps, 1),
             "confidence": round(self._confidence, 2),
             "tracker": "ByteTrack",
             "model": "YOLO11m-Pose",
@@ -242,6 +258,25 @@ class SentryOrchestrator:
             "indicator": indicator,
             "targetMode": self._shared.target_mode,
             "logs": list(self._logs),
+            # Pipeline debug — shows exactly what the math computed
+            "debug": {
+                "rawPan": self._debug_raw_pan,
+                "rawTilt": self._debug_raw_tilt,
+                "spatialX": round(self._debug_spatial[0], 1),
+                "spatialY": round(self._debug_spatial[1], 1),
+                "spatialZ": round(self._debug_spatial[2], 1),
+                "depthCm": round(self._debug_depth, 1),
+                "targetPx": [round(self._debug_target_px[0], 1),
+                             round(self._debug_target_px[1], 1)],
+                "vlaserPx": [round(self._debug_vlaser_px[0], 1),
+                             round(self._debug_vlaser_px[1], 1)],
+                "frameW": self._frame_w,
+                "frameH": self._frame_h,
+                "panDir": self._pan_dir,
+                "tiltDir": self._tilt_dir,
+                "panTrim": self._pan_trim,
+                "tiltTrim": self._tilt_trim,
+            },
         }
 
     # ── COCO Skeleton Connections ──────────────────────────────────────
@@ -279,6 +314,7 @@ class SentryOrchestrator:
         tracker_result=None,
         target_xy: tuple[float, float] | None = None,
         depth_cm: float = 0.0,
+        spatial_debug: tuple[float, float, float] | None = None,
     ) -> np.ndarray:
         """Draw the full HUD overlay on the frame for the MJPEG stream."""
         h, w = frame.shape[:2]
@@ -314,7 +350,7 @@ class SentryOrchestrator:
             # Skeleton
             self._draw_skeleton(annotated, tracker_result.all_keypoints)
 
-            # Target crosshair (the body part the laser is aiming at)
+            # Target crosshair (red — where YOLO says the body part is)
             if target_xy is not None:
                 tx, ty = int(target_xy[0]), int(target_xy[1])
                 cv2.drawMarker(annotated, (tx, ty), (0, 0, 255),
@@ -326,6 +362,28 @@ class SentryOrchestrator:
                 cv2.putText(annotated, f"Z={depth_cm:.0f}cm", (int(x1), int(y2) + 18),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
+        # ── Virtual Laser Overlay (green — where math says laser hits) ──
+        if depth_cm > 0 and self._state == TurretState.TRACKING_LOCKED:
+            vl_x, vl_y = self._spatial.reverse_project(
+                self._pan, self._tilt,
+                self._pan_dir, self._tilt_dir,
+                depth_cm,
+            )
+            # Clamp to frame bounds for drawing
+            vl_x = max(0, min(w - 1, vl_x))
+            vl_y = max(0, min(h - 1, vl_y))
+
+            # Green filled circle = virtual laser dot
+            cv2.circle(annotated, (vl_x, vl_y), 8, (0, 255, 0), -1)
+            cv2.circle(annotated, (vl_x, vl_y), 10, (0, 255, 0), 2)
+            cv2.putText(annotated, "VLASER", (vl_x + 14, vl_y + 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+
+            # Cyan line from target to virtual laser (shows math error)
+            if target_xy is not None:
+                tx, ty = int(target_xy[0]), int(target_xy[1])
+                cv2.line(annotated, (tx, ty), (vl_x, vl_y), (255, 255, 0), 1)
+
         # ── HUD text overlay ─────────────────────────────────────────
         cv2.putText(annotated, f"STATE: {self._state}", (10, 25),
                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
@@ -335,6 +393,16 @@ class SentryOrchestrator:
                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         cv2.putText(annotated, f"TARGET: {self._shared.target_mode.upper()}", (10, 100),
                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
+        # Debug: turret-relative coordinates + depth info
+        if spatial_debug is not None:
+            sx, sy, sz = spatial_debug
+            cv2.putText(annotated, f"T_XYZ: ({sx:.0f}, {sy:.0f}, {sz:.0f})cm",
+                        (10, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 255), 1)
+        if depth_cm > 0:
+            method = self._depth.last_method
+            cv2.putText(annotated, f"DEPTH: {depth_cm:.0f}cm [{method}]",
+                        (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 255, 180), 1)
 
         # Crosshair at frame center
         cv2.line(annotated, (w // 2 - 20, h // 2), (w // 2 + 20, h // 2), (255, 255, 255), 1)
@@ -359,11 +427,13 @@ class SentryOrchestrator:
         else:
             self._log("Serial tether OFFLINE — turret will not move")
 
-        # Open the webcam
-        cap = cv2.VideoCapture(self._cam_index)
+        # Open the webcam (use DirectShow on Windows for faster capture)
+        cap = cv2.VideoCapture(self._cam_index, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._frame_w)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._frame_h)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize capture latency
+        cap.set(cv2.CAP_PROP_FPS, 60)            # Request highest available FPS
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)       # Minimize capture latency
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))  # Faster codec
 
         if not cap.isOpened():
             self._log("FATAL: Cannot open webcam at index %d" % self._cam_index)
@@ -376,13 +446,16 @@ class SentryOrchestrator:
         else:
             self._log("Entering SCANNING state (HOG+SVM active)")
 
-        frame_times: deque[float] = deque(maxlen=30)
+        frame_times: deque[float] = deque(maxlen=10)
+        last_broadcast = time.perf_counter()
+        frame_count = 0  # For skipping JPEG encode on alternating frames
 
         # Per-frame annotation data
         cascade_bbox = None
         tracker_result_viz = None
         target_xy = None
         depth_cm = 0.0
+        spatial_debug = None
 
         try:
             while self._running:
@@ -397,6 +470,7 @@ class SentryOrchestrator:
                 cascade_bbox = None
                 tracker_result_viz = None
                 target_xy = None
+                spatial_debug = None
 
                 # ── State Machine ────────────────────────────────────
                 if self._state == TurretState.SCANNING and not self._bypass_hog:
@@ -438,22 +512,50 @@ class SentryOrchestrator:
                         )
                         target_xy = (filtered.x, filtered.y)
 
-                        # Stage 2: Depth estimation
+                        # Stage 2: Depth estimation (with bbox fallback)
                         depth_cm = self._depth.estimate(
                             tracker_result.left_shoulder_px,
                             tracker_result.right_shoulder_px,
+                            bbox=tracker_result.bbox,
                         )
 
                         # Stage 3: Spatial calibration
                         spatial = self._spatial.transform(filtered.x, filtered.y, depth_cm)
+                        spatial_debug = (spatial.x, spatial.y, spatial.z)
 
-                        # Stage 4: Inverse kinematics
+                        # Stage 4: Inverse kinematics + trim correction
                         servo = self._ik.compute(spatial.x, spatial.y, spatial.z)
-                        self._pan = servo.pan
-                        self._tilt = servo.tilt
+                        raw_pan = servo.pan + self._pan_trim
+                        raw_tilt = servo.tilt + self._tilt_trim
+
+                        # Clamp to FOV-safe range (prevent laser overshooting camera)
+                        self._pan = max(30, min(150, raw_pan))
+                        self._tilt = max(30, min(150, raw_tilt))
+
+                        # Store debug values for telemetry
+                        self._debug_raw_pan = servo.pan
+                        self._debug_raw_tilt = servo.tilt
+                        self._debug_spatial = (spatial.x, spatial.y, spatial.z)
+                        self._debug_depth = depth_cm
+                        self._debug_target_px = target_xy
+
+                        # Compute virtual laser pixel position (reverse projection)
+                        if depth_cm > 0:
+                            # Subtract trim because trim is for physical hardware correction.
+                            # The camera view assumes perfect hardware.
+                            sim_pan = self._pan - self._pan_trim
+                            sim_tilt = self._tilt - self._tilt_trim
+                            vl_x, vl_y = self._spatial.reverse_project(
+                                sim_pan, sim_tilt,
+                                self._pan_dir, self._tilt_dir,
+                                depth_cm,
+                            )
+                            self._debug_vlaser_px = (float(vl_x), float(vl_y))
+                        else:
+                            self._debug_vlaser_px = target_xy
 
                         # Stage 5: Serial command
-                        self._serial.send_command(servo.pan, servo.tilt, STATE_LOCKED)
+                        self._serial.send_command(self._pan, self._tilt, STATE_LOCKED)
 
                     else:
                         # No detection this frame — check timeout
@@ -485,23 +587,31 @@ class SentryOrchestrator:
                     self._fps = 1.0 / avg_time if avg_time > 0 else 0.0
 
                 # ── Annotate & publish MJPEG frame ────────────────────
+                frame_count += 1
                 annotated = self._annotate_frame(
                     frame,
                     cascade_bbox=cascade_bbox,
                     tracker_result=tracker_result_viz,
                     target_xy=target_xy,
                     depth_cm=depth_cm,
+                    spatial_debug=spatial_debug,
                 )
-                _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                self._shared.latest_frame_jpeg = jpeg_buf.tobytes()
+                # Encode JPEG (quality 50 for speed; skip odd frames to halve encode cost)
+                if frame_count % 2 == 0 or self._shared.latest_frame_jpeg is None:
+                    _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                    self._shared.latest_frame_jpeg = jpeg_buf.tobytes()
 
                 # ── Broadcast telemetry to WebSocket clients ──────────
-                telemetry = self._build_telemetry()
-                await self._ws_manager.set_telemetry(telemetry)
-                await self._ws_manager.broadcast()
+                # Throttle WS broadcasts to ~10Hz to avoid flooding
+                now = time.perf_counter()
+                if now - last_broadcast >= 0.1:
+                    telemetry = self._build_telemetry()
+                    await self._ws_manager.set_telemetry(telemetry)
+                    await self._ws_manager.broadcast()
+                    last_broadcast = now
 
-                # Yield control to the event loop briefly
-                await asyncio.sleep(0.001)
+                # Yield control to the event loop (minimal delay)
+                await asyncio.sleep(0)
 
         except Exception as exc:
             self._logger.exception("Vision loop crashed: %s", exc)
