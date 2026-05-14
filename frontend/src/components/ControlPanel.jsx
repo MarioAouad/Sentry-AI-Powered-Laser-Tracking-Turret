@@ -5,18 +5,12 @@ export default function ControlPanel({
   systemState,
   isMobile,
   setTargetMode,
-  sendSystemCommand,
-  connected,
 }) {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const activeMode = (systemState.targetMode || "chest").toLowerCase();
 
   const handleTarget = (mode) => {
     if (setTargetMode) setTargetMode(mode);
-  };
-
-  const handleSystemCmd = (cmd) => {
-    if (sendSystemCommand) sendSystemCommand(cmd);
   };
 
   const isActive = (mode) => activeMode === mode;
