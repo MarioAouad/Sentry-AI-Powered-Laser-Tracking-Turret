@@ -7,7 +7,7 @@ to the React Vite frontend dashboard.
 Endpoints:
     GET  /health           → Health check
     GET  /video-feed       → MJPEG live camera stream
-    POST /target-mode      → Change targeting body part (head/chest/hand)
+    POST /target-mode      → Change targeting body part (head/chest)
     POST /system-control   → Start / Stop / Calibrate the system
     WS   /ws/telemetry     → Real-time telemetry broadcast
 
@@ -47,7 +47,7 @@ logger = logging.getLogger("sentry.api.server")
 
 # ── Request Models ───────────────────────────────────────────────────
 class TargetModeRequest(BaseModel):
-    mode: str  # "head", "chest", or "hand"
+    mode: str  # "head" or "chest"
 
 
 class SystemControlRequest(BaseModel):
@@ -65,6 +65,7 @@ class APISharedState:
         self.target_mode: str = "chest"
         self.system_running: bool = False
         self.latest_frame_jpeg: bytes | None = None
+        self.latest_frame_id: int = 0
         self.on_target_mode_change: Any = None   # callback
         self.on_system_command: Any = None        # callback
 
@@ -113,9 +114,9 @@ def create_app(
     # ── Target Mode ──────────────────────────────────────────────────
     @app.post("/target-mode")
     async def set_target_mode(req: TargetModeRequest) -> JSONResponse:
-        if req.mode not in ("head", "chest", "hand"):
+        if req.mode not in ("head", "chest"):
             return JSONResponse(
-                {"error": f"Invalid mode '{req.mode}'. Use head, chest, or hand."},
+                {"error": f"Invalid mode '{req.mode}'. Use head or chest."},
                 status_code=400,
             )
         shared_state.target_mode = req.mode
@@ -129,9 +130,9 @@ def create_app(
     #   http://localhost:8000/target/chest
     @app.get("/target/{mode}")
     async def quick_target(mode: str) -> JSONResponse:
-        if mode not in ("head", "chest", "hand"):
+        if mode not in ("head", "chest"):
             return JSONResponse(
-                {"error": f"Invalid mode '{mode}'. Use head, chest, or hand."},
+                {"error": f"Invalid mode '{mode}'. Use head or chest."},
                 status_code=400,
             )
         shared_state.target_mode = mode
@@ -161,16 +162,19 @@ def create_app(
         The frontend can display this with: <img src="http://localhost:8000/video-feed" />
         """
         async def frame_generator():
+            last_sent_frame_id = -1
             while True:
                 frame_bytes = shared_state.latest_frame_jpeg
-                if frame_bytes is not None:
+                frame_id = shared_state.latest_frame_id
+                if frame_bytes is not None and frame_id != last_sent_frame_id:
+                    last_sent_frame_id = frame_id
                     yield (
                         b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n\r\n" +
                         frame_bytes +
                         b"\r\n"
                     )
-                await asyncio.sleep(0.016)  # ~60 FPS cap — actual rate is limited by vision loop
+                await asyncio.sleep(0.004)
 
         return StreamingResponse(
             frame_generator(),

@@ -350,39 +350,10 @@ class SentryOrchestrator:
             # Skeleton
             self._draw_skeleton(annotated, tracker_result.all_keypoints)
 
-            # Target crosshair (red — where YOLO says the body part is)
-            if target_xy is not None:
-                tx, ty = int(target_xy[0]), int(target_xy[1])
-                cv2.drawMarker(annotated, (tx, ty), (0, 0, 255),
-                               cv2.MARKER_CROSS, 20, 2)
-                cv2.circle(annotated, (tx, ty), 12, (0, 0, 255), 2)
-
             # Depth label
             if depth_cm > 0:
                 cv2.putText(annotated, f"Z={depth_cm:.0f}cm", (int(x1), int(y2) + 18),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-
-        # ── Virtual Laser Overlay (green — where math says laser hits) ──
-        if depth_cm > 0 and self._state == TurretState.TRACKING_LOCKED:
-            vl_x, vl_y = self._spatial.reverse_project(
-                self._pan, self._tilt,
-                self._pan_dir, self._tilt_dir,
-                depth_cm,
-            )
-            # Clamp to frame bounds for drawing
-            vl_x = max(0, min(w - 1, vl_x))
-            vl_y = max(0, min(h - 1, vl_y))
-
-            # Green filled circle = virtual laser dot
-            cv2.circle(annotated, (vl_x, vl_y), 8, (0, 255, 0), -1)
-            cv2.circle(annotated, (vl_x, vl_y), 10, (0, 255, 0), 2)
-            cv2.putText(annotated, "VLASER", (vl_x + 14, vl_y + 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-
-            # Cyan line from target to virtual laser (shows math error)
-            if target_xy is not None:
-                tx, ty = int(target_xy[0]), int(target_xy[1])
-                cv2.line(annotated, (tx, ty), (vl_x, vl_y), (255, 255, 0), 1)
 
         # ── HUD text overlay ─────────────────────────────────────────
         cv2.putText(annotated, f"STATE: {self._state}", (10, 25),
@@ -600,6 +571,7 @@ class SentryOrchestrator:
                 if frame_count % 2 == 0 or self._shared.latest_frame_jpeg is None:
                     _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 50])
                     self._shared.latest_frame_jpeg = jpeg_buf.tobytes()
+                    self._shared.latest_frame_id += 1
 
                 # ── Broadcast telemetry to WebSocket clients ──────────
                 # Throttle WS broadcasts to ~10Hz to avoid flooding

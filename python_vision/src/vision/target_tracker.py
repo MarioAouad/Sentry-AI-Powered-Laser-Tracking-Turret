@@ -7,7 +7,7 @@ ONLY after the HOG+SVM gate confirms a human presence.  It performs:
 1.  Full skeletal pose estimation using YOLO11m-Pose (17 COCO keypoints).
 2.  Frame-to-frame identity persistence via the ByteTrack tracker.
 3.  Target keypoint extraction based on the user-selected body part
-    (head / chest / hand) received from the frontend UI.
+    (head / chest) received from the frontend UI.
 
 COCO 17-Keypoint Index Map:
     0  Nose              9  Left Wrist
@@ -33,13 +33,12 @@ import numpy as np
 logger = logging.getLogger("sentry.vision.tracker")
 
 # ── Target modes mapped to keypoint indices ──────────────────────────
-TargetMode = Literal["head", "chest", "hand"]
+TargetMode = Literal["head", "chest"]
 
 # Which keypoint indices to average for each targeting mode
 _TARGET_KEYPOINTS: dict[TargetMode, list[int]] = {
     "head": [0],          # Nose
     "chest": [5, 6],      # Midpoint of left+right shoulders
-    "hand": [9, 10],      # Midpoint of left+right wrists
 }
 
 # Shoulder indices for depth estimation (always needed)

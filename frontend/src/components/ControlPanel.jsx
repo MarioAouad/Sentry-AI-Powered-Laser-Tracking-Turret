@@ -5,18 +5,12 @@ export default function ControlPanel({
   systemState,
   isMobile,
   setTargetMode,
-  sendSystemCommand,
-  connected,
 }) {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const activeMode = (systemState.targetMode || "chest").toLowerCase();
 
   const handleTarget = (mode) => {
     if (setTargetMode) setTargetMode(mode);
-  };
-
-  const handleSystemCmd = (cmd) => {
-    if (sendSystemCommand) sendSystemCommand(cmd);
   };
 
   const isActive = (mode) => activeMode === mode;
@@ -110,40 +104,6 @@ export default function ControlPanel({
             />
           </div>
 
-          {/* HAND target point — clickable */}
-          <div
-            style={{
-              ...point,
-              ...handPoint,
-              borderColor: isActive("hand")
-                ? "rgba(239, 68, 68, 0.95)"
-                : hoveredPoint === "hand"
-                ? "rgba(56, 189, 248, 1)"
-                : "rgba(56, 189, 248, 0.6)",
-              boxShadow: isActive("hand")
-                ? "0 0 24px rgba(239, 68, 68, 0.9), 0 0 48px rgba(239, 68, 68, 0.3)"
-                : hoveredPoint === "hand"
-                ? "0 0 24px rgba(56, 189, 248, 0.9)"
-                : "0 0 16px rgba(56, 189, 248, 0.5)",
-              cursor: "pointer",
-              pointerEvents: "auto",
-              transform: `translate(-50%, -50%) scale(${
-                isActive("hand") || hoveredPoint === "hand" ? 1.2 : 1
-              })`,
-              transition: "all 0.2s ease",
-            }}
-            onClick={() => handleTarget("hand")}
-            onMouseEnter={() => setHoveredPoint("hand")}
-            onMouseLeave={() => setHoveredPoint(null)}
-            title="Target: Hand"
-          >
-            <span
-              style={{
-                ...pointCore,
-                background: isActive("hand") ? "#ef4444" : "#e0f2fe",
-              }}
-            />
-          </div>
         </div>
 
         {/* Legend */}
@@ -151,7 +111,6 @@ export default function ControlPanel({
           {[
             { mode: "head", label: "Head" },
             { mode: "chest", label: "Chest" },
-            { mode: "hand", label: "Hand" },
           ].map(({ mode, label }) => (
             <div
               key={mode}
@@ -224,7 +183,7 @@ const bodyPanel = {
   gap: "14px",
   alignItems: "center",
   minHeight: 0,
-  paddingTop: "18px",
+  paddingTop: 0,
 };
 
 const bodyFigure = {
@@ -234,6 +193,7 @@ const bodyFigure = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  transform: "translateY(-14px)",
 };
 
 const imgStyle = {
@@ -265,12 +225,6 @@ const headPoint = {
 const chestPoint = {
   top: "32%",
   left: "50%",
-  transform: "translate(-50%, -50%)",
-};
-
-const handPoint = {
-  top: "47%",
-  left: "30%",
   transform: "translate(-50%, -50%)",
 };
 

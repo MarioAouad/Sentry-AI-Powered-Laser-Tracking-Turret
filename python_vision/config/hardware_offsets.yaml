@@ -116,7 +116,7 @@ vision:
   # Seconds without a valid YOLO track before falling back to HOG scanning
   track_lost_timeout_sec: 2.0
 
-  # Default target body part: "head", "chest", or "hand"
+  # Default target body part: "head" or "chest"
   default_target_mode: "chest"
 
 # ---------------------------------------------------------------------------

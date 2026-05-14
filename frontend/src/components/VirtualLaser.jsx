@@ -18,8 +18,10 @@ export default function VirtualLaser({ systemState }) {
   const animRef = useRef(null);
 
   const debug = systemState.debug || {};
-  const targetPx = debug.targetPx || [0, 0];
-  const vlaserPx = debug.vlaserPx || [0, 0];
+  const targetX = debug.targetPx?.[0] || 0;
+  const targetY = debug.targetPx?.[1] || 0;
+  const vlaserX = debug.vlaserPx?.[0] || 0;
+  const vlaserY = debug.vlaserPx?.[1] || 0;
   const frameW = debug.frameW || 640;
   const frameH = debug.frameH || 480;
   const yaw = systemState.yaw ?? 90;
@@ -28,12 +30,12 @@ export default function VirtualLaser({ systemState }) {
 
   // Update trail with virtual laser position
   useEffect(() => {
-    if (vlaserPx[0] > 0 || vlaserPx[1] > 0) {
+    if (vlaserX > 0 || vlaserY > 0) {
       const trail = trailRef.current;
-      trail.push({ x: vlaserPx[0], y: vlaserPx[1] });
+      trail.push({ x: vlaserX, y: vlaserY });
       if (trail.length > 40) trail.shift();
     }
-  }, [vlaserPx[0], vlaserPx[1]]);
+  }, [vlaserX, vlaserY]);
 
   // Canvas rendering
   useEffect(() => {
@@ -129,10 +131,10 @@ export default function VirtualLaser({ systemState }) {
       }
 
       // ── Target position (red crosshair — where we WANT to hit) ──
-      const txp = toX(targetPx[0]);
-      const typ = toY(targetPx[1]);
+      const txp = toX(targetX);
+      const typ = toY(targetY);
 
-      if (targetPx[0] > 0 || targetPx[1] > 0) {
+      if (targetX > 0 || targetY > 0) {
         // Crosshair arms
         ctx.strokeStyle = "rgba(239, 68, 68, 0.8)";
         ctx.lineWidth = 1.5;
@@ -152,12 +154,12 @@ export default function VirtualLaser({ systemState }) {
       }
 
       // ── Virtual laser position (green dot — where laser ACTUALLY hits) ──
-      const vlx = toX(vlaserPx[0]);
-      const vly = toY(vlaserPx[1]);
+      const vlx = toX(vlaserX);
+      const vly = toY(vlaserY);
 
-      if (vlaserPx[0] > 0 || vlaserPx[1] > 0) {
+      if (vlaserX > 0 || vlaserY > 0) {
         // Error line (yellow) connecting target to laser
-        if (targetPx[0] > 0) {
+        if (targetX > 0) {
           ctx.beginPath();
           ctx.moveTo(txp, typ);
           ctx.lineTo(vlx, vly);
@@ -198,9 +200,9 @@ export default function VirtualLaser({ systemState }) {
       }
 
       // Bottom-left: pixel error
-      if (targetPx[0] > 0 && vlaserPx[0] > 0) {
-        const errX = Math.round(vlaserPx[0] - targetPx[0]);
-        const errY = Math.round(vlaserPx[1] - targetPx[1]);
+      if (targetX > 0 && vlaserX > 0) {
+        const errX = Math.round(vlaserX - targetX);
+        const errY = Math.round(vlaserY - targetY);
         const errDist = Math.round(
           Math.sqrt(errX * errX + errY * errY)
         );
@@ -229,7 +231,7 @@ export default function VirtualLaser({ systemState }) {
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [yaw, pitch, targetPx, vlaserPx, frameW, frameH, depthCm, systemState.targetMode]);
+  }, [yaw, pitch, targetX, targetY, vlaserX, vlaserY, frameW, frameH, depthCm, systemState.targetMode]);
 
   return (
     <div style={card}>
