@@ -95,29 +95,10 @@ export function useSystemState() {
     }
   }, []);
 
-  // ── System Control API ─────────────────────────────────────────
-  const sendSystemCommand = useCallback(async (command) => {
-    try {
-      const res = await fetch(`${API_BASE}/system-control`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command }),
-      });
-      if (res.ok) {
-        console.log("[Sentry API] System command →", command);
-      } else {
-        console.error("[Sentry API] System command failed:", await res.text());
-      }
-    } catch (err) {
-      console.error("[Sentry API] System command error:", err);
-    }
-  }, []);
-
   return {
     systemState,
     connected,
     setTargetMode,
-    sendSystemCommand,
     apiBase: API_BASE,
   };
 }

@@ -6,8 +6,7 @@ import ServoPanel from "../components/ServoPanel";
 import { useSystemState } from "../hooks/useSystemstate";
 
 export default function Dashboard() {
-  const { systemState, connected, setTargetMode, sendSystemCommand, apiBase } =
-    useSystemState();
+  const { systemState, connected, setTargetMode, apiBase } = useSystemState();
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -100,8 +99,6 @@ export default function Dashboard() {
             systemState={systemState}
             isMobile={isMobile}
             setTargetMode={setTargetMode}
-            sendSystemCommand={sendSystemCommand}
-            connected={connected}
           />
         </div>
 
