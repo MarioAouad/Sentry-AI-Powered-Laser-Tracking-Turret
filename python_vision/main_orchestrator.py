@@ -350,13 +350,6 @@ class SentryOrchestrator:
             # Skeleton
             self._draw_skeleton(annotated, tracker_result.all_keypoints)
 
-            # Target crosshair (red — where YOLO says the body part is)
-            if target_xy is not None:
-                tx, ty = int(target_xy[0]), int(target_xy[1])
-                cv2.drawMarker(annotated, (tx, ty), (0, 0, 255),
-                               cv2.MARKER_CROSS, 20, 2)
-                cv2.circle(annotated, (tx, ty), 12, (0, 0, 255), 2)
-
             # Depth label
             if depth_cm > 0:
                 cv2.putText(annotated, f"Z={depth_cm:.0f}cm", (int(x1), int(y2) + 18),
@@ -578,6 +571,7 @@ class SentryOrchestrator:
                 if frame_count % 2 == 0 or self._shared.latest_frame_jpeg is None:
                     _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 50])
                     self._shared.latest_frame_jpeg = jpeg_buf.tobytes()
+                    self._shared.latest_frame_id += 1
 
                 # ── Broadcast telemetry to WebSocket clients ──────────
                 # Throttle WS broadcasts to ~10Hz to avoid flooding

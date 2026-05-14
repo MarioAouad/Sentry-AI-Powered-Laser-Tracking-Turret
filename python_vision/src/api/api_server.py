@@ -65,6 +65,7 @@ class APISharedState:
         self.target_mode: str = "chest"
         self.system_running: bool = False
         self.latest_frame_jpeg: bytes | None = None
+        self.latest_frame_id: int = 0
         self.on_target_mode_change: Any = None   # callback
         self.on_system_command: Any = None        # callback
 
@@ -161,16 +162,19 @@ def create_app(
         The frontend can display this with: <img src="http://localhost:8000/video-feed" />
         """
         async def frame_generator():
+            last_sent_frame_id = -1
             while True:
                 frame_bytes = shared_state.latest_frame_jpeg
-                if frame_bytes is not None:
+                frame_id = shared_state.latest_frame_id
+                if frame_bytes is not None and frame_id != last_sent_frame_id:
+                    last_sent_frame_id = frame_id
                     yield (
                         b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n\r\n" +
                         frame_bytes +
                         b"\r\n"
                     )
-                await asyncio.sleep(0.016)  # ~60 FPS cap — actual rate is limited by vision loop
+                await asyncio.sleep(0.004)
 
         return StreamingResponse(
             frame_generator(),
